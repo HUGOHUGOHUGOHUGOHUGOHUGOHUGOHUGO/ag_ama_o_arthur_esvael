@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brotato-like Online — sobreviva junto</title>
+<meta name="description" content="Um roguelite de arena online. Crie uma sala, chame seus amigos, sobrevivam às ondas.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --void: #14161c;
+    --panel: #1b1f28;
+    --line: #2a2f3d;
+    --gold: #ffd75d;
+    --cyan: #5dd8ff;
+    --danger: #ff5d5d;
+    --mist: #8992a4;
+    --paper: #eef0f5;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--void);
+    color: var(--paper);
+    font-family: 'JetBrains Mono', monospace;
+    line-height: 1.6;
+  }
+  .pixel { font-family: 'Press Start 2P', monospace; }
+  a { color: inherit; }
+
+  /* ---------- background grid ---------- */
+  .grid-bg {
+    position: fixed; inset: 0; z-index: -1;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 42px 42px;
+    opacity: 0.35;
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 20%, black 40%, transparent 90%);
+  }
+
+  /* ---------- nav ---------- */
+  nav {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 22px 6vw; font-size: 13px; color: var(--mist);
+  }
+  nav .brand { color: var(--paper); font-weight: 700; }
+  nav a.gh { color: var(--mist); text-decoration: none; border-bottom: 1px dashed var(--line); }
+  nav a.gh:hover { color: var(--gold); border-color: var(--gold); }
+
+  /* ---------- hero ---------- */
+  .hero { text-align: center; padding: 8vh 6vw 6vh; max-width: 780px; margin: 0 auto; }
+  .eyebrow {
+    font-size: 11px; color: var(--gold); letter-spacing: 3px; margin-bottom: 22px;
+  }
+  h1.pixel {
+    font-size: clamp(22px, 5vw, 40px); line-height: 1.55; margin: 0 0 20px;
+    color: var(--paper); text-shadow: 3px 3px 0 var(--line);
+  }
+  h1.pixel span { color: var(--gold); }
+  .sub { color: var(--mist); font-size: 15px; max-width: 520px; margin: 0 auto 40px; }
+
+  /* ---------- terminal / signature element ---------- */
+  .terminal {
+    width: min(360px, 90%); margin: 0 auto 36px;
+    background: var(--panel); border: 2px solid var(--line); border-radius: 10px;
+    padding: 18px 22px; text-align: left;
+  }
+  .terminal .tt-label { font-size: 11px; color: var(--mist); letter-spacing: 2px; margin-bottom: 8px; }
+  .terminal .tt-code {
+    font-size: 28px; letter-spacing: 10px; color: var(--cyan); font-weight: 700;
+  }
+  .terminal .tt-code .cursor { color: var(--gold); animation: blink 1s step-end infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .cta-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; padding: 14px 28px; border-radius: 8px; text-decoration: none;
+    font-size: 13px; font-weight: 700; letter-spacing: 0.5px;
+  }
+  .btn-primary { background: var(--gold); color: var(--void); }
+  .btn-primary:hover { background: #ffe08a; }
+  .btn-ghost { border: 1px solid var(--line); color: var(--paper); }
+  .btn-ghost:hover { border-color: var(--cyan); color: var(--cyan); }
+
+  /* ---------- arena preview ---------- */
+  .arena-wrap { display: flex; justify-content: center; padding: 0 6vw 8vh; }
+  .arena {
+    position: relative; width: min(640px, 100%); height: 300px;
+    background: var(--panel); border: 2px solid var(--line); border-radius: 12px;
+    overflow: hidden;
+  }
+  .dot { position: absolute; border-radius: 50%; }
+  .p1 { width: 16px; height: 16px; background: var(--cyan); top: 40%; left: 30%; animation: wander1 7s ease-in-out infinite; }
+  .p2 { width: 16px; height: 16px; background: var(--gold); top: 60%; left: 55%; animation: wander2 8.5s ease-in-out infinite; }
+  .e1 { width: 12px; height: 12px; background: var(--danger); top: 20%; left: 75%; animation: wander3 5.5s ease-in-out infinite; }
+  .e2 { width: 12px; height: 12px; background: var(--danger); top: 75%; left: 20%; animation: wander4 6.5s ease-in-out infinite; }
+  .e3 { width: 12px; height: 12px; background: var(--danger); top: 15%; left: 15%; animation: wander1 9s ease-in-out infinite reverse; }
+  @keyframes wander1 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(60px,30px)} }
+  @keyframes wander2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-50px,-25px)} }
+  @keyframes wander3 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-70px,40px)} }
+  @keyframes wander4 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(40px,-45px)} }
+
+  /* ---------- steps ---------- */
+  .steps { max-width: 900px; margin: 0 auto; padding: 4vh 6vw 10vh; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  @media (max-width: 720px) { .steps { grid-template-columns: 1fr; } }
+  .step { border-top: 2px solid var(--line); padding-top: 16px; }
+  .step .num { font-family: 'Press Start 2P'; font-size: 20px; color: var(--gold); display: block; margin-bottom: 10px; }
+  .step h3 { margin: 0 0 8px; font-size: 15px; color: var(--paper); }
+  .step p { margin: 0; color: var(--mist); font-size: 13.5px; }
+
+  footer {
+    text-align: center; padding: 6vh 6vw; color: var(--mist); font-size: 12px;
+    border-top: 1px solid var(--line);
+  }
+  footer a { color: var(--cyan); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="grid-bg"></div>
+
+<nav>
+  <span class="brand">🥔 brotato-like online</span>
+  <a class="gh" href="https://github.com/SEU-USUARIO/brotato-multiplayer" target="_blank" rel="noopener">código-fonte no GitHub ↗</a>
+</nav>
+
+<section class="hero">
+  <div class="eyebrow">ARENA ROGUELITE · CO-OP ONLINE</div>
+  <h1 class="pixel">SOBREVIVA<br>ÀS ONDAS.<br><span>JUNTOS.</span></h1>
+  <p class="sub">Crie uma sala, mande o código pra galera e enfrentem ondas de inimigos cada vez mais difíceis — direto do navegador, sem instalar nada.</p>
+
+  <div class="terminal">
+    <div class="tt-label">SALA ATIVA</div>
+    <div class="tt-code" id="ttCode">7YER<span class="cursor">_</span></div>
+  </div>
+
+  <div class="cta-row">
+    <a class="btn btn-primary" href="https://SEU-JOGO.onrender.com" target="_blank" rel="noopener">JOGAR AGORA →</a>
+    <a class="btn btn-ghost" href="#como-funciona">Como funciona</a>
+  </div>
+</section>
+
+<div class="arena-wrap">
+  <div class="arena">
+    <div class="dot p1"></div>
+    <div class="dot p2"></div>
+    <div class="dot e1"></div>
+    <div class="dot e2"></div>
+    <div class="dot e3"></div>
+  </div>
+</div>
+
+<section class="steps" id="como-funciona">
+  <div class="step">
+    <span class="num pixel">01</span>
+    <h3>Crie uma sala</h3>
+    <p>Um clique gera um código de 4 caracteres. Nenhum cadastro, nenhuma instalação.</p>
+  </div>
+  <div class="step">
+    <span class="num pixel">02</span>
+    <h3>Chame seus amigos</h3>
+    <p>Manda o código por qualquer lugar — WhatsApp, Discord, o que for. Eles entram com ele.</p>
+  </div>
+  <div class="step">
+    <span class="num pixel">03</span>
+    <h3>Sobrevivam às ondas</h3>
+    <p>Ataque automático, ondas cada vez mais difíceis. Quem cai, revive — a sala continua.</p>
+  </div>
+</section>
+
+<footer>
+  Protótipo de código aberto. Servidor Node.js + WebSocket, sem coleta de dados.
+  <br>
+  <a href="https://github.com/SEU-USUARIO/brotato-multiplayer" target="_blank" rel="noopener">ver no GitHub</a>
+</footer>
+
+<script>
+  const codes = ['7YER', 'K3PL', 'M9XA', 'V2QT', 'H5WD'];
+  let i = 0;
+  setInterval(() => {
+    i = (i + 1) % codes.length;
+    document.getElementById('ttCode').innerHTML = codes[i] + '<span class="cursor">_</span>';
+  }, 2200);
+</script>
+</body>
+</html>
