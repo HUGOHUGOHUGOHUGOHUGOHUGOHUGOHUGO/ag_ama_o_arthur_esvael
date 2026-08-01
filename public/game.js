@@ -14,6 +14,12 @@ const waveTimerEl = document.getElementById('waveTimer');
 const playerCountEl = document.getElementById('playerCount');
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
+const shopOverlay = document.getElementById('shopOverlay');
+const shopOptionsEl = document.getElementById('shopOptions');
+const shopTimerEl = document.getElementById('shopTimer');
+const shopWaitingEl = document.getElementById('shopWaiting');
+const joystick = document.getElementById('joystick');
+const joystickKnob = document.getElementById('joystickKnob');
 
 roomInput.addEventListener('input', () => {
   roomInput.value = roomInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -23,6 +29,8 @@ let myId = null;
 let myRoom = null;
 let joined = false;
 let latestState = null;
+let lastShopRenderKey = null;
+let chosenThisShop = false;
 
 // ---------- WebSocket ----------
 const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
@@ -30,8 +38,6 @@ const ws = new WebSocket(proto + location.host);
 
 ws.onopen = () => {
   lobbyStatus.textContent = 'Conectado. Crie uma sala ou entre em uma existente.';
-  createBtn.disabled = false;
-  joinBtn.disabled = false;
 };
 ws.onclose = () => {
   lobbyStatus.textContent = 'Desconectado do servidor.';
@@ -58,6 +64,7 @@ ws.onmessage = (evt) => {
 
   } else if (msg.type === 'state') {
     latestState = msg;
+    updateShopUI();
   }
 };
 
@@ -81,7 +88,7 @@ joinBtn.onclick = () => {
 roomInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') joinBtn.click(); });
 nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') createBtn.click(); });
 
-// ---------- Input do jogo ----------
+// ---------- Input: teclado ----------
 const keys = { up: false, down: false, left: false, right: false };
 const KEYMAP = {
   KeyW: 'up', ArrowUp: 'up',
@@ -89,7 +96,6 @@ const KEYMAP = {
   KeyA: 'left', ArrowLeft: 'left',
   KeyD: 'right', ArrowRight: 'right',
 };
-
 window.addEventListener('keydown', (e) => {
   const k = KEYMAP[e.code];
   if (k) keys[k] = true;
@@ -99,11 +105,105 @@ window.addEventListener('keyup', (e) => {
   if (k) keys[k] = false;
 });
 
+// ---------- Input: joystick virtual (touch/mouse) ----------
+let joyActive = false;
+let joyPointerId = null;
+const JOY_MAX = 40; // raio máximo que o manche se afasta do centro (px)
+const JOY_DEADZONE = 0.25;
+
+function setJoyFromDelta(dx, dy) {
+  const dist = Math.hypot(dx, dy);
+  const clamped = Math.min(dist, JOY_MAX);
+  const angle = Math.atan2(dy, dx);
+  const kx = Math.cos(angle) * clamped;
+  const ky = Math.sin(angle) * clamped;
+  joystickKnob.style.transform = `translate(${kx}px, ${ky}px)`;
+
+  const nx = dist > 0 ? (Math.cos(angle) * clamped) / JOY_MAX : 0;
+  const ny = dist > 0 ? (Math.sin(angle) * clamped) / JOY_MAX : 0;
+  keys.left = nx < -JOY_DEADZONE;
+  keys.right = nx > JOY_DEADZONE;
+  keys.up = ny < -JOY_DEADZONE;
+  keys.down = ny > JOY_DEADZONE;
+}
+
+function resetJoy() {
+  joystickKnob.style.transform = 'translate(0px, 0px)';
+  keys.up = keys.down = keys.left = keys.right = false;
+}
+
+joystick.addEventListener('pointerdown', (e) => {
+  joyActive = true;
+  joyPointerId = e.pointerId;
+  joystick.setPointerCapture(e.pointerId);
+  const rect = joystick.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  setJoyFromDelta(e.clientX - cx, e.clientY - cy);
+});
+joystick.addEventListener('pointermove', (e) => {
+  if (!joyActive || e.pointerId !== joyPointerId) return;
+  const rect = joystick.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  setJoyFromDelta(e.clientX - cx, e.clientY - cy);
+});
+function endJoy(e) {
+  if (e.pointerId !== joyPointerId) return;
+  joyActive = false;
+  joyPointerId = null;
+  resetJoy();
+}
+joystick.addEventListener('pointerup', endJoy);
+joystick.addEventListener('pointercancel', endJoy);
+
 setInterval(() => {
   if (joined && ws.readyState === 1) {
     ws.send(JSON.stringify({ type: 'input', ...keys }));
   }
 }, 50);
+
+// ---------- Loja entre rodadas ----------
+function updateShopUI() {
+  if (!latestState) return;
+
+  if (latestState.phase !== 'shop') {
+    shopOverlay.classList.remove('active');
+    lastShopRenderKey = null;
+    chosenThisShop = false;
+    return;
+  }
+
+  shopOverlay.classList.add('active');
+  shopTimerEl.textContent = Math.ceil(latestState.shopTimeLeft / 1000);
+
+  const myOptions = (latestState.shopOptions && latestState.shopOptions[myId]) || [];
+  const iChose = (latestState.shopChosen || []).includes(myId);
+  const renderKey = myOptions.map((o) => o.id).join(',') + '|' + iChose;
+
+  if (renderKey === lastShopRenderKey) return;
+  lastShopRenderKey = renderKey;
+
+  shopOptionsEl.innerHTML = '';
+
+  if (iChose) {
+    shopWaitingEl.textContent = 'Upgrade escolhido! Esperando o resto da galera...';
+    return;
+  }
+  shopWaitingEl.textContent = '';
+
+  for (const opt of myOptions) {
+    const card = document.createElement('div');
+    card.className = 'shopCard';
+    card.innerHTML = `<div class="label">${opt.label}</div><div class="desc">${opt.desc}</div>`;
+    card.onclick = () => {
+      if (chosenThisShop) return;
+      chosenThisShop = true;
+      ws.send(JSON.stringify({ type: 'choose_upgrade', upgradeId: opt.id }));
+    };
+    shopOptionsEl.appendChild(card);
+  }
+}
 
 // ---------- Render ----------
 function drawPlayer(p) {
@@ -176,8 +276,10 @@ function render() {
     for (const p of latestState.players) drawPlayer(p);
 
     waveEl.textContent = latestState.wave;
-    waveTimerEl.textContent = Math.ceil(latestState.waveTimeLeft / 1000);
     playerCountEl.textContent = latestState.players.length;
+    waveTimerEl.textContent = latestState.phase === 'shop'
+      ? 'na loja'
+      : Math.ceil(latestState.waveTimeLeft / 1000);
   }
 
   requestAnimationFrame(render);

@@ -24,6 +24,7 @@ const ENEMY_CONTACT_DMG = 8;
 const ENEMY_CONTACT_COOLDOWN = 600;
 
 const WAVE_INTERVAL_MS = 15000;
+const SHOP_DURATION_MS = 12000;
 
 const PISTOL_COOLDOWN = 450;
 const PISTOL_DMG = 8;
@@ -36,10 +37,37 @@ const MELEE_DMG = 16;
 const MELEE_RADIUS = 55;
 
 const COLORS = ['#ff5d5d', '#5dd8ff', '#8dff5d', '#ffd75d', '#c07dff', '#ff9d5d'];
-const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sem 0/O/1/I pra evitar confusão
+const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sem 0/O/1/I
+
+// ---------- Upgrades (loja entre rodadas) ----------
+const UPGRADE_POOL = [
+  { id: 'hp', label: '+20 Vida Máxima', desc: 'Aumenta o limite de vida e cura 20', apply: (p) => {
+      p.stats.maxHpBonus += 20;
+      p.maxHp = PLAYER_MAX_HP + p.stats.maxHpBonus;
+      p.hp = Math.min(p.maxHp, p.hp + 20);
+  }},
+  { id: 'dmg', label: '+15% Dano', desc: 'Pistola e espada causam mais dano', apply: (p) => { p.stats.dmgMult *= 1.15; }},
+  { id: 'atkspeed', label: '+15% Vel. de Ataque', desc: 'Ataca com mais frequência', apply: (p) => { p.stats.atkSpeedMult *= 1.15; }},
+  { id: 'movespeed', label: '+10% Vel. de Movimento', desc: 'Anda mais rápido pela arena', apply: (p) => { p.stats.moveSpeedMult *= 1.10; }},
+  { id: 'melee', label: '+20% Raio da Espada', desc: 'Área de dano corpo-a-corpo maior', apply: (p) => { p.stats.meleeRadiusMult *= 1.20; }},
+  { id: 'range', label: '+15% Alcance da Pistola', desc: 'Mira inimigos mais distantes', apply: (p) => { p.stats.rangeMult *= 1.15; }},
+];
+
+function defaultStats() {
+  return { dmgMult: 1, atkSpeedMult: 1, moveSpeedMult: 1, meleeRadiusMult: 1, rangeMult: 1, maxHpBonus: 0 };
+}
+
+function randomUpgrades(n) {
+  const shuffled = [...UPGRADE_POOL].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, n).map((u) => ({ id: u.id, label: u.label, desc: u.desc }));
+}
+
+function applyUpgrade(player, upgradeId) {
+  const u = UPGRADE_POOL.find((x) => x.id === upgradeId);
+  if (u) u.apply(player);
+}
 
 // ---------- Rooms ----------
-// rooms[code] = { players, enemies, bullets, wave, waveTimer, enemyIdCounter, bulletIdCounter, colorIdx }
 const rooms = {};
 
 function generateRoomCode() {
@@ -57,6 +85,10 @@ function createRoom() {
     bullets: [],
     wave: 0,
     waveTimer: 0,
+    phase: 'wave', // 'wave' | 'shop'
+    shopTimer: 0,
+    shopOptions: {}, // playerId -> [{id,label,desc}]
+    shopChosen: new Set(),
     enemyIdCounter: 0,
     bulletIdCounter: 0,
     colorIdx: 0,
@@ -81,6 +113,23 @@ function spawnWave(room) {
     room.enemies.push({ id: room.enemyIdCounter, x: pos.x, y: pos.y, hp, maxHp: hp, lastContact: 0 });
   }
   room.waveTimer = WAVE_INTERVAL_MS;
+}
+
+function startShopPhase(room) {
+  room.phase = 'shop';
+  room.shopTimer = SHOP_DURATION_MS;
+  room.shopChosen = new Set();
+  room.shopOptions = {};
+  for (const pid of Object.keys(room.players)) {
+    room.shopOptions[pid] = randomUpgrades(3);
+  }
+}
+
+function endShopPhase(room) {
+  room.phase = 'wave';
+  room.shopOptions = {};
+  room.shopChosen = new Set();
+  spawnWave(room);
 }
 
 function nearestEnemy(room, x, y, maxRange) {
@@ -108,14 +157,35 @@ function nearestPlayer(room, x, y) {
 function tickRoom(room, code) {
   const now = Date.now();
 
+  // ---- fase de loja: tudo congela, só o timer/escolhas avançam ----
+  if (room.phase === 'shop') {
+    room.shopTimer -= TICK_MS;
+    const ids = Object.keys(room.players);
+    const allChosen = ids.length > 0 && ids.every((pid) => room.shopChosen.has(pid));
+    if (room.shopTimer <= 0 || allChosen) {
+      endShopPhase(room);
+    }
+    broadcastRoom(room, code);
+    return;
+  }
+
+  // ---- fase de combate ----
   room.waveTimer -= TICK_MS;
-  if (room.waveTimer <= 0) spawnWave(room);
+  if (room.waveTimer <= 0) {
+    if (room.wave === 0) {
+      spawnWave(room);
+    } else {
+      startShopPhase(room);
+      broadcastRoom(room, code);
+      return;
+    }
+  }
 
   for (const p of Object.values(room.players)) {
     if (!p.alive) {
       if (now >= p.respawnAt) {
         p.alive = true;
-        p.hp = PLAYER_MAX_HP;
+        p.hp = p.maxHp;
         p.x = ARENA_W / 2 + (Math.random() - 0.5) * 100;
         p.y = ARENA_H / 2 + (Math.random() - 0.5) * 100;
       }
@@ -129,29 +199,36 @@ function tickRoom(room, code) {
     if (p.input.right) dx += 1;
     if (dx !== 0 || dy !== 0) {
       const len = Math.hypot(dx, dy);
-      p.x += (dx / len) * PLAYER_SPEED;
-      p.y += (dy / len) * PLAYER_SPEED;
+      const speed = PLAYER_SPEED * p.stats.moveSpeedMult;
+      p.x += (dx / len) * speed;
+      p.y += (dy / len) * speed;
       p.x = Math.max(PLAYER_RADIUS, Math.min(ARENA_W - PLAYER_RADIUS, p.x));
       p.y = Math.max(PLAYER_RADIUS, Math.min(ARENA_H - PLAYER_RADIUS, p.y));
     }
 
-    if (now - p.lastShot >= PISTOL_COOLDOWN) {
-      const target = nearestEnemy(room, p.x, p.y, PISTOL_RANGE);
+    const pistolCooldown = PISTOL_COOLDOWN / p.stats.atkSpeedMult;
+    if (now - p.lastShot >= pistolCooldown) {
+      const range = PISTOL_RANGE * p.stats.rangeMult;
+      const target = nearestEnemy(room, p.x, p.y, range);
       if (target) {
         const ang = Math.atan2(target.y - p.y, target.x - p.x);
         room.bulletIdCounter += 1;
         room.bullets.push({
           id: room.bulletIdCounter, x: p.x, y: p.y,
-          vx: Math.cos(ang) * BULLET_SPEED, vy: Math.sin(ang) * BULLET_SPEED, owner: p.id,
+          vx: Math.cos(ang) * BULLET_SPEED, vy: Math.sin(ang) * BULLET_SPEED,
+          dmg: PISTOL_DMG * p.stats.dmgMult, owner: p.id,
         });
         p.lastShot = now;
       }
     }
 
-    if (now - p.lastMelee >= MELEE_COOLDOWN) {
+    const meleeCooldown = MELEE_COOLDOWN / p.stats.atkSpeedMult;
+    if (now - p.lastMelee >= meleeCooldown) {
+      const radius = MELEE_RADIUS * p.stats.meleeRadiusMult;
+      const dmg = MELEE_DMG * p.stats.dmgMult;
       let hit = false;
       for (const e of room.enemies) {
-        if (Math.hypot(e.x - p.x, e.y - p.y) <= MELEE_RADIUS) { e.hp -= MELEE_DMG; hit = true; }
+        if (Math.hypot(e.x - p.x, e.y - p.y) <= radius) { e.hp -= dmg; hit = true; }
       }
       if (hit) p.lastMelee = now;
     }
@@ -162,7 +239,7 @@ function tickRoom(room, code) {
     if (b.x < 0 || b.x > ARENA_W || b.y < 0 || b.y > ARENA_H) return false;
     for (const e of room.enemies) {
       if (Math.hypot(e.x - b.x, e.y - b.y) <= ENEMY_RADIUS + BULLET_RADIUS) {
-        e.hp -= PISTOL_DMG;
+        e.hp -= b.dmg;
         return false;
       }
     }
@@ -193,11 +270,15 @@ function broadcastRoom(room, code) {
   const state = {
     type: 'state',
     room: code,
+    phase: room.phase,
     wave: room.wave,
     waveTimeLeft: Math.max(0, room.waveTimer),
+    shopTimeLeft: room.phase === 'shop' ? Math.max(0, room.shopTimer) : 0,
+    shopOptions: room.phase === 'shop' ? room.shopOptions : {},
+    shopChosen: room.phase === 'shop' ? Array.from(room.shopChosen) : [],
     arena: { w: ARENA_W, h: ARENA_H },
     players: Object.values(room.players).map((p) => ({
-      id: p.id, x: p.x, y: p.y, hp: p.hp, maxHp: PLAYER_MAX_HP,
+      id: p.id, x: p.x, y: p.y, hp: p.hp, maxHp: p.maxHp,
       color: p.color, name: p.name, alive: p.alive,
     })),
     enemies: room.enemies.map((e) => ({ id: e.id, x: e.x, y: e.y, hp: e.hp, maxHp: e.maxHp })),
@@ -220,6 +301,7 @@ function addPlayerToRoom(ws, code, name) {
     x: ARENA_W / 2 + (Math.random() - 0.5) * 100,
     y: ARENA_H / 2 + (Math.random() - 0.5) * 100,
     hp: PLAYER_MAX_HP,
+    maxHp: PLAYER_MAX_HP,
     color,
     name: (name && name.slice(0, 16)) || 'Player-' + id.slice(1, 4),
     input: { up: false, down: false, left: false, right: false },
@@ -227,7 +309,13 @@ function addPlayerToRoom(ws, code, name) {
     lastMelee: 0,
     alive: true,
     respawnAt: 0,
+    stats: defaultStats(),
   };
+
+  // se entrar durante a loja, ganha opções também
+  if (room.phase === 'shop' && !room.shopOptions[id]) {
+    room.shopOptions[id] = randomUpgrades(3);
+  }
 
   ws.roomCode = code;
   ws.playerId = id;
@@ -256,19 +344,34 @@ wss.on('connection', (ws) => {
       addPlayerToRoom(ws, code, msg.name);
 
     } else if (msg.type === 'input') {
-      if (ws.roomCode && rooms[ws.roomCode] && rooms[ws.roomCode].players[ws.playerId]) {
-        rooms[ws.roomCode].players[ws.playerId].input = {
+      const room = rooms[ws.roomCode];
+      if (room && room.players[ws.playerId]) {
+        room.players[ws.playerId].input = {
           up: !!msg.up, down: !!msg.down, left: !!msg.left, right: !!msg.right,
         };
+      }
+
+    } else if (msg.type === 'choose_upgrade') {
+      const room = rooms[ws.roomCode];
+      if (room && room.phase === 'shop' && room.players[ws.playerId] && !room.shopChosen.has(ws.playerId)) {
+        const options = room.shopOptions[ws.playerId] || [];
+        const chosen = options.find((o) => o.id === msg.upgradeId);
+        if (chosen) {
+          applyUpgrade(room.players[ws.playerId], chosen.id);
+          room.shopChosen.add(ws.playerId);
+        }
       }
     }
   });
 
   ws.on('close', () => {
-    if (ws.roomCode && rooms[ws.roomCode]) {
-      delete rooms[ws.roomCode].players[ws.playerId];
-      if (Object.keys(rooms[ws.roomCode].players).length === 0) {
-        delete rooms[ws.roomCode]; // sala vazia é removida
+    const room = rooms[ws.roomCode];
+    if (room) {
+      delete room.players[ws.playerId];
+      delete room.shopOptions[ws.playerId];
+      room.shopChosen.delete(ws.playerId);
+      if (Object.keys(room.players).length === 0) {
+        delete rooms[ws.roomCode];
       }
     }
   });

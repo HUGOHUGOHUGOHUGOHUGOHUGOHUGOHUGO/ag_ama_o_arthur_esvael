@@ -114,16 +114,21 @@ estático. Você ainda pode manter o repositório no GitHub normalmente, só o
 - Tela de lobby: criar sala (gera código) ou entrar com código de 4 caracteres
 - Várias salas simultâneas e isoladas no mesmo servidor
 - Ondas de inimigos crescentes, spawnando nas bordas do mapa
+- **Loja entre rodadas**: ao fim de cada onda, cada jogador escolhe 1 de 3
+  upgrades (vida, dano, velocidade de ataque, velocidade de movimento, raio
+  da espada, alcance da pistola) — os combates ficam pausados até todo mundo
+  escolher ou o tempo acabar
 - 2 armas automáticas (pistola + espada em área)
 - Vida, respawn após 3s ao morrer
+- **Suporte a celular**: tela responsiva e joystick virtual (aparece
+  automaticamente em telas de toque, sem atrapalhar quem joga com teclado)
 - Sincronização de todos os jogadores da mesma sala
 
 ## Ideias pra evoluir depois
 
-- Loja entre ondas (comprar armas/upgrades, como no Brotato original)
 - Mais tipos de arma e itens passivos
-- XP e level up
+- XP e level up separado dos upgrades de loja
 - Diferentes personagens/classes
-- Salas (várias partidas simultâneas) em vez de uma arena global
 - Interpolação de movimento no cliente para deixar mais suave em conexões
   ruins
+- Botão de ataque manual/mira no celular (hoje o ataque é sempre automático)
