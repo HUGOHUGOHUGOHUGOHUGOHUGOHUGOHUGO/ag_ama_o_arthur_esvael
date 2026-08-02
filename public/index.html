@@ -2,16 +2,17 @@
 <html lang="pt-br">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Brotato-like Online</title>
 <style>
   html, body {
     margin: 0; padding: 0; background: #14161c; color: #eee;
-    font-family: 'Segoe UI', Arial, sans-serif; overflow-x: hidden;
-    overscroll-behavior: none;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    /* sem overflow travado: a página precisa poder rolar normalmente,
+       inclusive dentro de navegadores in-app (WhatsApp/TikTok/Instagram) */
   }
   * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
-  #wrap { display: flex; flex-direction: column; align-items: center; padding: 16px; min-height: 100vh; }
+  #wrap { display: flex; flex-direction: column; align-items: center; padding: 16px 16px 48px; }
   h1 { font-size: 18px; margin: 0 0 16px; color: #ffd75d; letter-spacing: 1px; text-align: center; }
 
   /* ---- Lobby ---- */
@@ -37,7 +38,6 @@
   #lobbyMsg { font-size: 12px; color: #ff8d8d; min-height: 16px; }
   #lobbyStatus { font-size: 11px; color: #666; }
 
-  /* classes */
   .classGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .classCard {
     border: 2px solid #3a3f4f; border-radius: 8px; padding: 10px; cursor: pointer;
@@ -47,7 +47,6 @@
   .classCard .cname { font-size: 12.5px; font-weight: bold; color: #eee; margin-bottom: 3px; }
   .classCard .cdesc { font-size: 10.5px; color: #8992a4; line-height: 1.3; }
 
-  /* pub/priv toggle */
   .visToggle { display: flex; gap: 8px; margin-bottom: 10px; }
   .visBtn {
     flex: 1; padding: 10px; border-radius: 6px; border: 2px solid #3a3f4f;
@@ -55,34 +54,33 @@
   }
   .visBtn.selected { border-color: #5dd8ff; color: #5dd8ff; background: #10222b; }
 
-  /* lista de salas públicas */
+  /* lista de salas públicas — SEM scroll interno (evita capturar o gesto de
+     rolagem da página inteira em navegadores in-app problemáticos) */
   #roomListSection { display: flex; flex-direction: column; gap: 8px; }
   #roomListHead { display: flex; justify-content: space-between; align-items: center; }
-  #refreshBtn {
-    width: auto; padding: 6px 12px; font-size: 11px; background: #2a2f3d; color: #ccc;
-  }
-  #roomList { display: flex; flex-direction: column; gap: 6px; max-height: 160px; overflow-y: auto; }
+  #refreshBtn { width: auto; padding: 6px 12px; font-size: 11px; background: #2a2f3d; color: #ccc; }
+  #roomList { display: flex; flex-direction: column; gap: 6px; }
   .roomRow {
     display: flex; justify-content: space-between; align-items: center;
-    background: #14161c; border: 1px solid #2a2f3d; border-radius: 6px; padding: 8px 10px;
+    background: #14161c; border: 1px solid #2a2f3d; border-radius: 6px; padding: 10px 12px;
     font-size: 12px;
   }
   .roomRow .rInfo { color: #ccc; }
   .roomRow .rCode { color: #5dd8ff; font-weight: bold; letter-spacing: 2px; }
-  .roomRow button { width: auto; padding: 6px 14px; font-size: 11px; background: #ffd75d; color: #14161c; }
+  .roomRow button { width: auto; padding: 8px 16px; font-size: 11px; background: #ffd75d; color: #14161c; }
   #roomListEmpty { font-size: 11.5px; color: #666; text-align: center; padding: 8px 0; }
 
   /* ---- Game ---- */
   #gameScreen { display: none; flex-direction: column; align-items: center; width: 100%; max-width: 900px; }
-  #hud { display: flex; gap: 12px; margin-bottom: 8px; font-size: 12px; flex-wrap: wrap; justify-content: center; align-items: center; }
+  #hud { display: flex; gap: 10px; margin-bottom: 8px; font-size: 12px; flex-wrap: wrap; justify-content: center; align-items: center; }
   #hud span { color: #ffd75d; font-weight: bold; }
   #roomBadge {
     background: #2a2f3d; padding: 4px 10px; border-radius: 6px; font-size: 11px;
     letter-spacing: 2px; color: #5dd8ff; font-weight: bold;
   }
-  #leaveBtn {
-    width: auto; padding: 6px 14px; font-size: 11px; background: #ff5d5d; color: #14161c;
-  }
+  #hud button { width: auto; padding: 6px 14px; font-size: 11px; }
+  #leaveBtn { background: #ff5d5d; color: #14161c; }
+  #chatToggleBtn { background: #2a2f3d; color: #ccc; }
   .canvas-wrap { position: relative; width: 100%; max-width: 900px; }
   canvas {
     background: #202430; border: 2px solid #3a3f4f; border-radius: 8px;
@@ -91,10 +89,27 @@
   #status { margin-top: 8px; font-size: 12px; color: #888; }
   #help { margin-top: 6px; font-size: 11px; color: #666; text-align: center; }
 
+  /* ---- Chat ---- */
+  #chatPanel {
+    display: none; width: 100%; max-width: 900px; margin-top: 14px;
+    background: #1c2029; border: 2px solid #3a3f4f; border-radius: 10px; overflow: hidden;
+  }
+  #chatPanel.open { display: flex; flex-direction: column; }
+  #chatMessages { max-height: 160px; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .chatLine { font-size: 12.5px; line-height: 1.4; word-break: break-word; }
+  .chatLine .chatName { font-weight: bold; margin-right: 4px; }
+  .chatLine.system { color: #666; font-style: italic; }
+  #chatInputRow { display: flex; border-top: 1px solid #2a2f3d; }
+  #chatInput {
+    flex: 1; border: none; background: #14161c; color: #eee; padding: 12px;
+    font-size: 16px; outline: none;
+  }
+  #chatSendBtn { width: auto; border-radius: 0; background: #5dd8ff; color: #14161c; padding: 12px 18px; }
+
   /* ---- Controles mobile: ocupam o espaço ABAIXO do jogo ---- */
   #mobileControls {
     display: none; width: 100%; justify-content: center; align-items: center;
-    margin-top: 18px; padding: 10px 0 30px;
+    margin-top: 18px; padding: 10px 0 10px;
   }
   @media (pointer: coarse) {
     #mobileControls { display: flex; }
@@ -180,6 +195,7 @@
       <div>Onda: <span id="wave">0</span></div>
       <div>Próxima: <span id="waveTimer">--</span>s</div>
       <div>Jogadores: <span id="playerCount">0</span></div>
+      <button id="chatToggleBtn">💬 Chat</button>
       <button id="leaveBtn">Sair da sala</button>
     </div>
     <div class="canvas-wrap">
@@ -193,6 +209,14 @@
     </div>
     <div id="status"></div>
     <div id="help">PC: WASD/setas move · Ataque automático</div>
+
+    <div id="chatPanel">
+      <div id="chatMessages"></div>
+      <div id="chatInputRow">
+        <input id="chatInput" maxlength="200" placeholder="Mensagem para a sala...">
+        <button id="chatSendBtn">Enviar</button>
+      </div>
+    </div>
 
     <div id="mobileControls">
       <div>
