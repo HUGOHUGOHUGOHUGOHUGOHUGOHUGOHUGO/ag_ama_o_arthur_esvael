@@ -87,6 +87,12 @@
     width: 100%; height: auto; display: block; touch-action: none;
   }
   #status { margin-top: 8px; font-size: 12px; color: #888; }
+  #scoreboard {
+    margin-top: 8px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+    font-size: 11.5px; color: #ccc;
+  }
+  #scoreboard .scoreItem { background: #1c2029; border: 1px solid #2a2f3d; border-radius: 6px; padding: 4px 10px; }
+  #scoreboard .scoreItem b { color: #ffd75d; }
   #help { margin-top: 6px; font-size: 11px; color: #666; text-align: center; }
 
   /* ---- Chat ---- */
@@ -208,6 +214,7 @@
       </div>
     </div>
     <div id="status"></div>
+    <div id="scoreboard"></div>
     <div id="help">PC: WASD/setas move · Ataque automático</div>
 
     <div id="chatPanel">

@@ -38,6 +38,8 @@ const MELEE_RADIUS = 55;
 
 const COLORS = ['#ff5d5d', '#5dd8ff', '#8dff5d', '#ffd75d', '#c07dff', '#ff9d5d'];
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sem 0/O/1/I
+const SYSTEM_COLOR = '#8992a4';
+const CHAT_MAX_LEN = 200;
 
 // ---------- Tipos de inimigo ----------
 const ENEMY_TYPES = {
@@ -119,7 +121,7 @@ function createRoom(isPublic) {
     bullets: [],
     wave: 0,
     waveTimer: 0,
-    phase: 'wave', // 'wave' | 'shop'
+    phase: 'wave',
     shopTimer: 0,
     shopOptions: {},
     shopChosen: new Set(),
@@ -137,10 +139,22 @@ function randEdgePosition() {
   return { x: ARENA_W + 20, y: Math.random() * ARENA_H };
 }
 
-function spawnWave(room) {
+// ---------- Chat ----------
+function broadcastChat(code, name, color, text, system) {
+  const payload = JSON.stringify({
+    type: 'chat_message', name, color, text, system: !!system, ts: Date.now(),
+  });
+  for (const client of wss.clients) {
+    if (client.readyState === 1 && client.roomCode === code) client.send(payload);
+  }
+}
+function broadcastSystemMessage(code, text) {
+  broadcastChat(code, 'Sistema', SYSTEM_COLOR, text, true);
+}
+
+function spawnWave(room, code) {
   room.wave += 1;
   const numPlayers = Math.max(1, Object.keys(room.players).length);
-  // balanceamento: cresce com a onda E com o número de jogadores na sala
   const baseCount = 4 + room.wave * 1.3;
   const count = Math.min(Math.round(baseCount * (0.55 + 0.45 * numPlayers)), 45);
   const baseHp = 16 + room.wave * 4.5;
@@ -159,9 +173,10 @@ function spawnWave(room) {
     });
   }
   room.waveTimer = WAVE_INTERVAL_MS;
+  if (code) broadcastSystemMessage(code, `Onda ${room.wave} começou! (${count} inimigos)`);
 }
 
-function startShopPhase(room) {
+function startShopPhase(room, code) {
   room.phase = 'shop';
   room.shopTimer = SHOP_DURATION_MS;
   room.shopChosen = new Set();
@@ -169,13 +184,14 @@ function startShopPhase(room) {
   for (const pid of Object.keys(room.players)) {
     room.shopOptions[pid] = randomUpgrades(3);
   }
+  if (code) broadcastSystemMessage(code, 'A loja abriu — escolham seus upgrades!');
 }
 
-function endShopPhase(room) {
+function endShopPhase(room, code) {
   room.phase = 'wave';
   room.shopOptions = {};
   room.shopChosen = new Set();
-  spawnWave(room);
+  spawnWave(room, code);
 }
 
 function nearestEnemy(room, x, y, maxRange) {
@@ -208,7 +224,7 @@ function tickRoom(room, code) {
     const ids = Object.keys(room.players);
     const allChosen = ids.length > 0 && ids.every((pid) => room.shopChosen.has(pid));
     if (room.shopTimer <= 0 || allChosen) {
-      endShopPhase(room);
+      endShopPhase(room, code);
     }
     broadcastRoom(room, code);
     return;
@@ -217,9 +233,9 @@ function tickRoom(room, code) {
   room.waveTimer -= TICK_MS;
   if (room.waveTimer <= 0) {
     if (room.wave === 0) {
-      spawnWave(room);
+      spawnWave(room, code);
     } else {
-      startShopPhase(room);
+      startShopPhase(room, code);
       broadcastRoom(room, code);
       return;
     }
@@ -276,7 +292,10 @@ function tickRoom(room, code) {
       const dmg = MELEE_DMG * p.stats.dmgMult;
       let hit = false;
       for (const e of room.enemies) {
-        if (Math.hypot(e.x - p.x, e.y - p.y) <= radius) { e.hp -= dmg; hit = true; }
+        if (Math.hypot(e.x - p.x, e.y - p.y) <= radius) {
+          e.hp -= dmg; hit = true;
+          if (e.hp <= 0 && !e.killCredited) { e.killCredited = true; p.kills += 1; }
+        }
       }
       if (hit) p.lastMelee = now;
     }
@@ -290,6 +309,11 @@ function tickRoom(room, code) {
       if (b.hitIds && b.hitIds.has(e.id)) continue;
       if (Math.hypot(e.x - b.x, e.y - b.y) <= e.radius + BULLET_RADIUS) {
         e.hp -= b.dmg;
+        if (e.hp <= 0 && !e.killCredited) {
+          e.killCredited = true;
+          const owner = room.players[b.owner];
+          if (owner) owner.kills += 1;
+        }
         if (!b.hitIds) b.hitIds = new Set();
         b.hitIds.add(e.id);
         if (b.pierceLeft > 0) { b.pierceLeft -= 1; } else { consumed = true; }
@@ -332,7 +356,7 @@ function broadcastRoom(room, code) {
     arena: { w: ARENA_W, h: ARENA_H },
     players: Object.values(room.players).map((p) => ({
       id: p.id, x: p.x, y: p.y, hp: p.hp, maxHp: p.maxHp,
-      color: p.color, name: p.name, alive: p.alive, classId: p.classId,
+      color: p.color, name: p.name, alive: p.alive, classId: p.classId, kills: p.kills,
     })),
     enemies: room.enemies.map((e) => ({ id: e.id, x: e.x, y: e.y, hp: e.hp, maxHp: e.maxHp, typeId: e.typeId })),
     bullets: room.bullets.map((b) => ({ id: b.id, x: b.x, y: b.y })),
@@ -365,6 +389,7 @@ function addPlayerToRoom(ws, code, name, classId) {
     respawnAt: 0,
     stats: defaultStats(),
     classId: resolvedClassId,
+    kills: 0,
   };
   applyClass(player, resolvedClassId);
   room.players[id] = player;
@@ -376,16 +401,20 @@ function addPlayerToRoom(ws, code, name, classId) {
   ws.roomCode = code;
   ws.playerId = id;
   ws.send(JSON.stringify({ type: 'joined', id, color, room: code, classId: resolvedClassId, isPublic: room.isPublic }));
+  broadcastSystemMessage(code, `${player.name} entrou na sala.`);
 }
 
 function removePlayerFromRoom(ws) {
-  const room = rooms[ws.roomCode];
+  const code = ws.roomCode;
+  const room = rooms[code];
   if (room) {
+    const player = room.players[ws.playerId];
     delete room.players[ws.playerId];
     delete room.shopOptions[ws.playerId];
     room.shopChosen.delete(ws.playerId);
+    if (player) broadcastSystemMessage(code, `${player.name} saiu da sala.`);
     if (Object.keys(room.players).length === 0) {
-      delete rooms[ws.roomCode];
+      delete rooms[code];
     }
   }
   ws.roomCode = null;
@@ -445,6 +474,16 @@ wss.on('connection', (ws) => {
         if (chosen) {
           applyUpgrade(room.players[ws.playerId], chosen.id);
           room.shopChosen.add(ws.playerId);
+        }
+      }
+
+    } else if (msg.type === 'chat') {
+      const room = rooms[ws.roomCode];
+      const player = room && room.players[ws.playerId];
+      if (room && player && typeof msg.text === 'string') {
+        const text = msg.text.trim().slice(0, CHAT_MAX_LEN);
+        if (text.length > 0) {
+          broadcastChat(ws.roomCode, player.name, player.color, text, false);
         }
       }
     }

@@ -10,6 +10,7 @@ const lobbyMsg = document.getElementById('lobbyMsg');
 const lobbyStatus = document.getElementById('lobbyStatus');
 const roomCodeEl = document.getElementById('roomCode');
 const statusEl = document.getElementById('status');
+const scoreboardEl = document.getElementById('scoreboard');
 const waveEl = document.getElementById('wave');
 const waveTimerEl = document.getElementById('waveTimer');
 const playerCountEl = document.getElementById('playerCount');
@@ -102,6 +103,7 @@ ws.onmessage = (evt) => {
     gameScreen.style.display = 'flex';
     statusEl.textContent = 'Na sala ' + myRoom + (msg.isPublic ? ' (pública)' : ' (privada)') + '.';
     chatMessagesEl.innerHTML = '';
+    chatPanel.classList.add('open'); // chat visível por padrão
 
   } else if (msg.type === 'left') {
     joined = false;
@@ -357,7 +359,8 @@ function drawPlayer(p) {
   ctx.fillStyle = '#fff';
   ctx.font = '11px Arial';
   ctx.textAlign = 'center';
-  ctx.fillText(p.id === myId ? 'você' : p.name, p.x, p.y - 30);
+  const label = (p.id === myId ? 'você' : p.name) + ' · ' + (p.kills || 0) + '☠';
+  ctx.fillText(label, p.x, p.y - 30);
   if (!p.alive) {
     ctx.fillStyle = '#ff5d5d';
     ctx.fillText('revivendo...', p.x, p.y + 28);
@@ -410,6 +413,12 @@ function render() {
     waveTimerEl.textContent = latestState.phase === 'shop'
       ? 'loja'
       : Math.ceil(latestState.waveTimeLeft / 1000);
+
+    const sorted = [...latestState.players].sort((a, b) => (b.kills || 0) - (a.kills || 0));
+    scoreboardEl.innerHTML = sorted.map((p) => {
+      const label = (p.id === myId ? 'você' : p.name);
+      return `<div class="scoreItem">${label}: <b>${p.kills || 0}</b> ☠</div>`;
+    }).join('');
   }
 
   requestAnimationFrame(render);

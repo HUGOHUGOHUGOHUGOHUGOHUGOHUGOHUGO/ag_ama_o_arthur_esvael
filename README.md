@@ -130,6 +130,11 @@ estático. Você ainda pode manter o repositório no GitHub normalmente, só o
 - **Suporte a celular**: layout responsivo e joystick virtual — no celular ele
   fica numa área dedicada *abaixo* da tela do jogo (não sobrepõe a arena),
   aparece só em telas de toque
+- **Chat da sala**: painel visível por padrão ao entrar (dá pra
+  recolher/expandir pelo botão "💬 Chat"), com mensagens automáticas de
+  sistema (entrada/saída de jogadores, nova onda, abertura da loja)
+- **Placar de abates**: contador de inimigos derrotados por jogador, exibido
+  junto ao nome na arena e num placar logo abaixo dela
 
 ## Ideias pra evoluir depois
 
