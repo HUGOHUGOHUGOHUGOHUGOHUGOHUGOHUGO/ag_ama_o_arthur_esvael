@@ -10,19 +10,19 @@
     font-family: 'Segoe UI', Arial, sans-serif; overflow-x: hidden;
     overscroll-behavior: none;
   }
-  * { -webkit-tap-highlight-color: transparent; }
-  #wrap { display: flex; flex-direction: column; align-items: center; padding: 16px; box-sizing: border-box; min-height: 100vh; }
+  * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+  #wrap { display: flex; flex-direction: column; align-items: center; padding: 16px; min-height: 100vh; }
   h1 { font-size: 18px; margin: 0 0 16px; color: #ffd75d; letter-spacing: 1px; text-align: center; }
 
   /* ---- Lobby ---- */
   #lobby {
     background: #1c2029; border: 2px solid #3a3f4f; border-radius: 12px;
-    padding: 24px; width: min(320px, 92vw); box-sizing: border-box;
+    padding: 24px; width: min(380px, 92vw);
     display: flex; flex-direction: column; gap: 16px;
   }
-  #lobby label { font-size: 12px; color: #999; display: block; margin-bottom: 4px; }
+  #lobby label { font-size: 12px; color: #999; display: block; margin-bottom: 6px; }
   #lobby input {
-    width: 100%; box-sizing: border-box; padding: 12px; border-radius: 6px;
+    width: 100%; padding: 12px; border-radius: 6px;
     border: 1px solid #3a3f4f; background: #14161c; color: #eee; font-size: 16px;
   }
   #roomInput { text-transform: uppercase; letter-spacing: 3px; text-align: center; font-weight: bold; }
@@ -30,20 +30,58 @@
   .lobby-section:first-of-type { border-top: none; padding-top: 0; }
   button {
     cursor: pointer; border: none; border-radius: 6px; padding: 13px;
-    font-size: 15px; font-weight: bold; width: 100%; touch-action: manipulation;
+    font-size: 14px; font-weight: bold; width: 100%; touch-action: manipulation;
   }
   #createBtn { background: #ffd75d; color: #14161c; }
   #joinBtn { background: #5dd8ff; color: #14161c; margin-top: 8px; }
   #lobbyMsg { font-size: 12px; color: #ff8d8d; min-height: 16px; }
   #lobbyStatus { font-size: 11px; color: #666; }
 
+  /* classes */
+  .classGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .classCard {
+    border: 2px solid #3a3f4f; border-radius: 8px; padding: 10px; cursor: pointer;
+    background: #14161c; touch-action: manipulation;
+  }
+  .classCard.selected { border-color: #ffd75d; background: #23241a; }
+  .classCard .cname { font-size: 12.5px; font-weight: bold; color: #eee; margin-bottom: 3px; }
+  .classCard .cdesc { font-size: 10.5px; color: #8992a4; line-height: 1.3; }
+
+  /* pub/priv toggle */
+  .visToggle { display: flex; gap: 8px; margin-bottom: 10px; }
+  .visBtn {
+    flex: 1; padding: 10px; border-radius: 6px; border: 2px solid #3a3f4f;
+    background: #14161c; color: #999; font-size: 12.5px; font-weight: bold;
+  }
+  .visBtn.selected { border-color: #5dd8ff; color: #5dd8ff; background: #10222b; }
+
+  /* lista de salas públicas */
+  #roomListSection { display: flex; flex-direction: column; gap: 8px; }
+  #roomListHead { display: flex; justify-content: space-between; align-items: center; }
+  #refreshBtn {
+    width: auto; padding: 6px 12px; font-size: 11px; background: #2a2f3d; color: #ccc;
+  }
+  #roomList { display: flex; flex-direction: column; gap: 6px; max-height: 160px; overflow-y: auto; }
+  .roomRow {
+    display: flex; justify-content: space-between; align-items: center;
+    background: #14161c; border: 1px solid #2a2f3d; border-radius: 6px; padding: 8px 10px;
+    font-size: 12px;
+  }
+  .roomRow .rInfo { color: #ccc; }
+  .roomRow .rCode { color: #5dd8ff; font-weight: bold; letter-spacing: 2px; }
+  .roomRow button { width: auto; padding: 6px 14px; font-size: 11px; background: #ffd75d; color: #14161c; }
+  #roomListEmpty { font-size: 11.5px; color: #666; text-align: center; padding: 8px 0; }
+
   /* ---- Game ---- */
   #gameScreen { display: none; flex-direction: column; align-items: center; width: 100%; max-width: 900px; }
-  #hud { display: flex; gap: 14px; margin-bottom: 8px; font-size: 12px; flex-wrap: wrap; justify-content: center; }
+  #hud { display: flex; gap: 12px; margin-bottom: 8px; font-size: 12px; flex-wrap: wrap; justify-content: center; align-items: center; }
   #hud span { color: #ffd75d; font-weight: bold; }
   #roomBadge {
     background: #2a2f3d; padding: 4px 10px; border-radius: 6px; font-size: 11px;
     letter-spacing: 2px; color: #5dd8ff; font-weight: bold;
+  }
+  #leaveBtn {
+    width: auto; padding: 6px 14px; font-size: 11px; background: #ff5d5d; color: #14161c;
   }
   .canvas-wrap { position: relative; width: 100%; max-width: 900px; }
   canvas {
@@ -53,39 +91,43 @@
   #status { margin-top: 8px; font-size: 12px; color: #888; }
   #help { margin-top: 6px; font-size: 11px; color: #666; text-align: center; }
 
-  /* ---- Joystick virtual (só aparece em telas de toque) ---- */
+  /* ---- Controles mobile: ocupam o espaço ABAIXO do jogo ---- */
+  #mobileControls {
+    display: none; width: 100%; justify-content: center; align-items: center;
+    margin-top: 18px; padding: 10px 0 30px;
+  }
+  @media (pointer: coarse) {
+    #mobileControls { display: flex; }
+  }
   #joystick {
-    display: none; position: absolute; left: 24px; bottom: 24px;
-    width: 110px; height: 110px; border-radius: 50%;
+    position: relative; width: 130px; height: 130px; border-radius: 50%;
     background: rgba(255,255,255,0.06); border: 2px solid rgba(255,255,255,0.18);
     touch-action: none;
   }
   #joystickKnob {
-    position: absolute; left: 50%; top: 50%; width: 46px; height: 46px;
-    margin-left: -23px; margin-top: -23px; border-radius: 50%;
+    position: absolute; left: 50%; top: 50%; width: 54px; height: 54px;
+    margin-left: -27px; margin-top: -27px; border-radius: 50%;
     background: rgba(255,215,93,0.85); border: 2px solid #ffd75d;
   }
-  @media (pointer: coarse) {
-    #joystick { display: block; }
-  }
+  #joystickHint { text-align: center; font-size: 10.5px; color: #666; margin-top: 8px; }
 
   /* ---- Loja entre rodadas ---- */
   #shopOverlay {
     display: none; position: absolute; inset: 0; background: rgba(10,11,15,0.92);
     border-radius: 8px; flex-direction: column; align-items: center; justify-content: center;
-    padding: 20px; box-sizing: border-box; text-align: center; z-index: 5;
+    padding: 20px; text-align: center; z-index: 5;
   }
   #shopOverlay.active { display: flex; }
-  #shopOverlay h2 { color: #ffd75d; font-size: 16px; margin: 0 0 4px; letter-spacing: 1px; }
+  #shopOverlay h2 { color: #ffd75d; font-size: 15px; margin: 0 0 4px; letter-spacing: 1px; }
   #shopOverlay .shopSub { color: #8992a4; font-size: 12px; margin-bottom: 18px; }
-  #shopOptions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; max-width: 640px; }
+  #shopOptions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; max-width: 640px; }
   .shopCard {
     background: #1c2029; border: 2px solid #3a3f4f; border-radius: 10px;
-    padding: 16px; width: 160px; cursor: pointer; touch-action: manipulation;
+    padding: 14px; width: 145px; cursor: pointer; touch-action: manipulation;
   }
   .shopCard:hover, .shopCard:active { border-color: #ffd75d; }
-  .shopCard .label { color: #ffd75d; font-weight: bold; font-size: 13px; margin-bottom: 6px; }
-  .shopCard .desc { color: #8992a4; font-size: 11px; }
+  .shopCard .label { color: #ffd75d; font-weight: bold; font-size: 12.5px; margin-bottom: 6px; }
+  .shopCard .desc { color: #8992a4; font-size: 10.5px; }
   #shopWaiting { color: #5dd8ff; font-size: 13px; margin-top: 16px; }
 </style>
 </head>
@@ -98,14 +140,36 @@
       <label for="nameInput">Seu nome (opcional)</label>
       <input id="nameInput" maxlength="16" placeholder="Ex: Zé">
     </div>
+
     <div class="lobby-section">
+      <label>Escolha sua classe</label>
+      <div class="classGrid" id="classGrid"></div>
+    </div>
+
+    <div class="lobby-section">
+      <label>Tipo de sala</label>
+      <div class="visToggle">
+        <button type="button" class="visBtn selected" id="visPrivate">🔒 Privada</button>
+        <button type="button" class="visBtn" id="visPublic">🌐 Pública</button>
+      </div>
       <button id="createBtn">Criar sala nova</button>
     </div>
+
     <div class="lobby-section">
       <label for="roomInput">Ou entre com o código de uma sala</label>
       <input id="roomInput" maxlength="4" placeholder="XXXX">
       <button id="joinBtn">Entrar na sala</button>
     </div>
+
+    <div class="lobby-section" id="roomListSection">
+      <div id="roomListHead">
+        <label style="margin:0">Salas públicas abertas</label>
+        <button type="button" id="refreshBtn">↻ Atualizar</button>
+      </div>
+      <div id="roomList"></div>
+      <div id="roomListEmpty">Nenhuma sala pública no momento.</div>
+    </div>
+
     <div id="lobbyMsg"></div>
     <div id="lobbyStatus">Conectando ao servidor...</div>
   </div>
@@ -114,12 +178,12 @@
     <div id="hud">
       <div id="roomBadge">SALA: <span id="roomCode">----</span></div>
       <div>Onda: <span id="wave">0</span></div>
-      <div>Próxima onda em: <span id="waveTimer">--</span>s</div>
+      <div>Próxima: <span id="waveTimer">--</span>s</div>
       <div>Jogadores: <span id="playerCount">0</span></div>
+      <button id="leaveBtn">Sair da sala</button>
     </div>
     <div class="canvas-wrap">
       <canvas id="game" width="900" height="600"></canvas>
-      <div id="joystick"><div id="joystickKnob"></div></div>
       <div id="shopOverlay">
         <h2>LOJA — ESCOLHA UM UPGRADE</h2>
         <div class="shopSub">Próxima onda em <span id="shopTimer">--</span>s</div>
@@ -128,7 +192,14 @@
       </div>
     </div>
     <div id="status"></div>
-    <div id="help">PC: WASD/setas move · Celular: use o manche na tela · Ataque automático</div>
+    <div id="help">PC: WASD/setas move · Ataque automático</div>
+
+    <div id="mobileControls">
+      <div>
+        <div id="joystick"><div id="joystickKnob"></div></div>
+        <div id="joystickHint">arraste pra mover</div>
+      </div>
+    </div>
   </div>
 </div>
 <script src="game.js"></script>

@@ -5,6 +5,7 @@ const nameInput = document.getElementById('nameInput');
 const roomInput = document.getElementById('roomInput');
 const createBtn = document.getElementById('createBtn');
 const joinBtn = document.getElementById('joinBtn');
+const leaveBtn = document.getElementById('leaveBtn');
 const lobbyMsg = document.getElementById('lobbyMsg');
 const lobbyStatus = document.getElementById('lobbyStatus');
 const roomCodeEl = document.getElementById('roomCode');
@@ -20,10 +21,42 @@ const shopTimerEl = document.getElementById('shopTimer');
 const shopWaitingEl = document.getElementById('shopWaiting');
 const joystick = document.getElementById('joystick');
 const joystickKnob = document.getElementById('joystickKnob');
+const classGrid = document.getElementById('classGrid');
+const visPrivateBtn = document.getElementById('visPrivate');
+const visPublicBtn = document.getElementById('visPublic');
+const roomListEl = document.getElementById('roomList');
+const roomListEmptyEl = document.getElementById('roomListEmpty');
+const refreshBtn = document.getElementById('refreshBtn');
 
 roomInput.addEventListener('input', () => {
   roomInput.value = roomInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
 });
+
+// ---------- Classes ----------
+const CLASSES = [
+  { id: 'soldado', label: '🪖 Soldado', desc: 'Equilibrado, +10% dano' },
+  { id: 'berserker', label: '🪓 Berserker', desc: 'Espada forte, menos vida' },
+  { id: 'tanque', label: '🛡️ Tanque', desc: '+50% vida, mais lento' },
+  { id: 'ninja', label: '🥷 Ninja', desc: 'Rápido e ágil, menos vida' },
+];
+let selectedClass = 'soldado';
+
+function renderClassGrid() {
+  classGrid.innerHTML = '';
+  for (const c of CLASSES) {
+    const card = document.createElement('div');
+    card.className = 'classCard' + (c.id === selectedClass ? ' selected' : '');
+    card.innerHTML = `<div class="cname">${c.label}</div><div class="cdesc">${c.desc}</div>`;
+    card.onclick = () => { selectedClass = c.id; renderClassGrid(); };
+    classGrid.appendChild(card);
+  }
+}
+renderClassGrid();
+
+// ---------- Público / Privado ----------
+let isPublic = false;
+visPrivateBtn.onclick = () => { isPublic = false; visPrivateBtn.classList.add('selected'); visPublicBtn.classList.remove('selected'); };
+visPublicBtn.onclick = () => { isPublic = true; visPublicBtn.classList.add('selected'); visPrivateBtn.classList.remove('selected'); };
 
 let myId = null;
 let myRoom = null;
@@ -31,6 +64,7 @@ let joined = false;
 let latestState = null;
 let lastShopRenderKey = null;
 let chosenThisShop = false;
+let roomListInterval = null;
 
 // ---------- WebSocket ----------
 const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
@@ -38,10 +72,13 @@ const ws = new WebSocket(proto + location.host);
 
 ws.onopen = () => {
   lobbyStatus.textContent = 'Conectado. Crie uma sala ou entre em uma existente.';
+  requestRoomList();
+  roomListInterval = setInterval(requestRoomList, 5000);
 };
 ws.onclose = () => {
   lobbyStatus.textContent = 'Desconectado do servidor.';
   statusEl.textContent = 'Conexão perdida.';
+  if (roomListInterval) clearInterval(roomListInterval);
 };
 ws.onerror = () => {
   lobbyStatus.textContent = 'Erro ao conectar no servidor.';
@@ -54,13 +91,29 @@ ws.onmessage = (evt) => {
     myId = msg.id;
     myRoom = msg.room;
     joined = true;
+    if (roomListInterval) { clearInterval(roomListInterval); roomListInterval = null; }
     roomCodeEl.textContent = myRoom;
     lobby.style.display = 'none';
     gameScreen.style.display = 'flex';
-    statusEl.textContent = 'Na sala ' + myRoom + '.';
+    statusEl.textContent = 'Na sala ' + myRoom + (msg.isPublic ? ' (pública)' : ' (privada)') + '.';
+
+  } else if (msg.type === 'left') {
+    joined = false;
+    myId = null;
+    myRoom = null;
+    latestState = null;
+    lastShopRenderKey = null;
+    gameScreen.style.display = 'none';
+    lobby.style.display = 'flex';
+    lobbyStatus.textContent = 'Você saiu da sala.';
+    requestRoomList();
+    if (!roomListInterval) roomListInterval = setInterval(requestRoomList, 5000);
 
   } else if (msg.type === 'error') {
     lobbyMsg.textContent = msg.message;
+
+  } else if (msg.type === 'room_list') {
+    renderRoomList(msg.rooms);
 
   } else if (msg.type === 'state') {
     latestState = msg;
@@ -68,10 +121,40 @@ ws.onmessage = (evt) => {
   }
 };
 
+function requestRoomList() {
+  if (ws.readyState === 1 && !joined) {
+    ws.send(JSON.stringify({ type: 'list_rooms' }));
+  }
+}
+refreshBtn.onclick = requestRoomList;
+
+function renderRoomList(rooms) {
+  roomListEl.innerHTML = '';
+  if (!rooms || rooms.length === 0) {
+    roomListEmptyEl.style.display = 'block';
+    return;
+  }
+  roomListEmptyEl.style.display = 'none';
+  for (const r of rooms) {
+    const row = document.createElement('div');
+    row.className = 'roomRow';
+    const phaseLabel = r.phase === 'shop' ? 'na loja' : ('onda ' + r.wave);
+    row.innerHTML = `<div class="rInfo"><span class="rCode">${r.code}</span> · ${r.players} jogador(es) · ${phaseLabel}</div>`;
+    const btn = document.createElement('button');
+    btn.textContent = 'Entrar';
+    btn.onclick = () => {
+      lobbyMsg.textContent = '';
+      ws.send(JSON.stringify({ type: 'join', room: r.code, name: nameInput.value.trim(), classId: selectedClass }));
+    };
+    row.appendChild(btn);
+    roomListEl.appendChild(row);
+  }
+}
+
 createBtn.onclick = () => {
   if (ws.readyState !== 1) return;
   lobbyMsg.textContent = '';
-  ws.send(JSON.stringify({ type: 'create', name: nameInput.value.trim() }));
+  ws.send(JSON.stringify({ type: 'create', name: nameInput.value.trim(), classId: selectedClass, isPublic }));
 };
 
 joinBtn.onclick = () => {
@@ -82,7 +165,13 @@ joinBtn.onclick = () => {
     return;
   }
   lobbyMsg.textContent = '';
-  ws.send(JSON.stringify({ type: 'join', room: code, name: nameInput.value.trim() }));
+  ws.send(JSON.stringify({ type: 'join', room: code, name: nameInput.value.trim(), classId: selectedClass }));
+};
+
+leaveBtn.onclick = () => {
+  if (ws.readyState === 1) {
+    ws.send(JSON.stringify({ type: 'leave' }));
+  }
 };
 
 roomInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') joinBtn.click(); });
@@ -108,7 +197,7 @@ window.addEventListener('keyup', (e) => {
 // ---------- Input: joystick virtual (touch/mouse) ----------
 let joyActive = false;
 let joyPointerId = null;
-const JOY_MAX = 40; // raio máximo que o manche se afasta do centro (px)
+const JOY_MAX = 45;
 const JOY_DEADZONE = 0.25;
 
 function setJoyFromDelta(dx, dy) {
@@ -126,27 +215,21 @@ function setJoyFromDelta(dx, dy) {
   keys.up = ny < -JOY_DEADZONE;
   keys.down = ny > JOY_DEADZONE;
 }
-
 function resetJoy() {
   joystickKnob.style.transform = 'translate(0px, 0px)';
   keys.up = keys.down = keys.left = keys.right = false;
 }
-
 joystick.addEventListener('pointerdown', (e) => {
   joyActive = true;
   joyPointerId = e.pointerId;
   joystick.setPointerCapture(e.pointerId);
   const rect = joystick.getBoundingClientRect();
-  const cx = rect.left + rect.width / 2;
-  const cy = rect.top + rect.height / 2;
-  setJoyFromDelta(e.clientX - cx, e.clientY - cy);
+  setJoyFromDelta(e.clientX - (rect.left + rect.width / 2), e.clientY - (rect.top + rect.height / 2));
 });
 joystick.addEventListener('pointermove', (e) => {
   if (!joyActive || e.pointerId !== joyPointerId) return;
   const rect = joystick.getBoundingClientRect();
-  const cx = rect.left + rect.width / 2;
-  const cy = rect.top + rect.height / 2;
-  setJoyFromDelta(e.clientX - cx, e.clientY - cy);
+  setJoyFromDelta(e.clientX - (rect.left + rect.width / 2), e.clientY - (rect.top + rect.height / 2));
 });
 function endJoy(e) {
   if (e.pointerId !== joyPointerId) return;
@@ -180,12 +263,10 @@ function updateShopUI() {
   const myOptions = (latestState.shopOptions && latestState.shopOptions[myId]) || [];
   const iChose = (latestState.shopChosen || []).includes(myId);
   const renderKey = myOptions.map((o) => o.id).join(',') + '|' + iChose;
-
   if (renderKey === lastShopRenderKey) return;
   lastShopRenderKey = renderKey;
 
   shopOptionsEl.innerHTML = '';
-
   if (iChose) {
     shopWaitingEl.textContent = 'Upgrade escolhido! Esperando o resto da galera...';
     return;
@@ -237,8 +318,8 @@ function drawPlayer(p) {
 function drawEnemy(e) {
   ctx.save();
   ctx.beginPath();
-  ctx.arc(e.x, e.y, 12, 0, Math.PI * 2);
-  ctx.fillStyle = '#ff5d5d';
+  ctx.arc(e.x, e.y, e.typeId === 'fast' ? 9 : 12, 0, Math.PI * 2);
+  ctx.fillStyle = e.typeId === 'fast' ? '#ff9d5d' : '#ff5d5d';
   ctx.fill();
   ctx.strokeStyle = '#7a1010';
   ctx.stroke();
@@ -260,7 +341,6 @@ function drawBullet(b) {
 
 function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-
   ctx.strokeStyle = '#2a2f3d';
   ctx.lineWidth = 1;
   for (let x = 0; x < canvas.width; x += 40) {
@@ -278,7 +358,7 @@ function render() {
     waveEl.textContent = latestState.wave;
     playerCountEl.textContent = latestState.players.length;
     waveTimerEl.textContent = latestState.phase === 'shop'
-      ? 'na loja'
+      ? 'loja'
       : Math.ceil(latestState.waveTimeLeft / 1000);
   }
 

@@ -112,23 +112,31 @@ estático. Você ainda pode manter o repositório no GitHub normalmente, só o
 
 - Multiplayer real via WebSocket, servidor autoritativo
 - Tela de lobby: criar sala (gera código) ou entrar com código de 4 caracteres
-- Várias salas simultâneas e isoladas no mesmo servidor
-- Ondas de inimigos crescentes, spawnando nas bordas do mapa
-- **Loja entre rodadas**: ao fim de cada onda, cada jogador escolhe 1 de 3
-  upgrades (vida, dano, velocidade de ataque, velocidade de movimento, raio
-  da espada, alcance da pistola) — os combates ficam pausados até todo mundo
-  escolher ou o tempo acabar
+- **Salas públicas e privadas**: crie uma sala privada (só quem tem o código
+  entra) ou pública (aparece numa lista pra qualquer um encontrar e entrar,
+  sem precisar do código)
+- **4 classes de personagem**: Soldado (equilibrado), Berserker (espada forte,
+  menos vida), Tanque (muita vida, mais lento), Ninja (rápido, menos vida)
+- **Botão de sair da sala**, volta pro lobby sem precisar recarregar a página
+- Ondas de inimigos crescentes, com um segundo tipo de inimigo ("rápido",
+  menor e mais ágil) aparecendo a partir da onda 4
+- **Balanceamento por número de jogadores**: a quantidade de inimigos por onda
+  escala com quantas pessoas estão na sala, não só com o número da onda
+- **Loja entre rodadas** com 8 upgrades possíveis: vida, dano, velocidade de
+  ataque, velocidade de movimento, raio da espada, alcance da pistola,
+  regeneração de vida e balas perfurantes
 - 2 armas automáticas (pistola + espada em área)
 - Vida, respawn após 3s ao morrer
-- **Suporte a celular**: tela responsiva e joystick virtual (aparece
-  automaticamente em telas de toque, sem atrapalhar quem joga com teclado)
-- Sincronização de todos os jogadores da mesma sala
+- **Suporte a celular**: layout responsivo e joystick virtual — no celular ele
+  fica numa área dedicada *abaixo* da tela do jogo (não sobrepõe a arena),
+  aparece só em telas de toque
 
 ## Ideias pra evoluir depois
 
 - Mais tipos de arma e itens passivos
 - XP e level up separado dos upgrades de loja
-- Diferentes personagens/classes
+- Mais classes / skins visuais por classe
 - Interpolação de movimento no cliente para deixar mais suave em conexões
   ruins
-- Botão de ataque manual/mira no celular (hoje o ataque é sempre automático)
+- Senha opcional pra salas privadas (hoje "privada" só significa "não aparece
+  na lista pública" — quem tem o código sempre consegue entrar)
