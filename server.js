@@ -23,7 +23,7 @@ const ENEMY_SPEED = 1.1;
 const ENEMY_CONTACT_DMG = 8;
 const ENEMY_CONTACT_COOLDOWN = 600;
 
-const WAVE_INTERVAL_MS = 15000;
+const WAVE_INTERVAL_MS = 60000; // 1 minuto entre ondas
 const SHOP_DURATION_MS = 12000;
 
 const PISTOL_COOLDOWN = 450;
@@ -40,6 +40,7 @@ const COLORS = ['#ff5d5d', '#5dd8ff', '#8dff5d', '#ffd75d', '#c07dff', '#ff9d5d'
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sem 0/O/1/I
 const SYSTEM_COLOR = '#8992a4';
 const CHAT_MAX_LEN = 200;
+const AVATAR_MAX_LEN = 60000; // ~45KB em base64, já reduzido no cliente
 
 // ---------- Tipos de inimigo ----------
 const ENEMY_TYPES = {
@@ -150,6 +151,12 @@ function broadcastChat(code, name, color, text, system) {
 }
 function broadcastSystemMessage(code, text) {
   broadcastChat(code, 'Sistema', SYSTEM_COLOR, text, true);
+}
+function broadcastAvatar(code, playerId, avatar) {
+  const payload = JSON.stringify({ type: 'avatar', playerId, avatar });
+  for (const client of wss.clients) {
+    if (client.readyState === 1 && client.roomCode === code) client.send(payload);
+  }
 }
 
 function spawnWave(room, code) {
@@ -367,12 +374,14 @@ function broadcastRoom(room, code) {
   }
 }
 
-function addPlayerToRoom(ws, code, name, classId) {
+function addPlayerToRoom(ws, code, name, classId, avatar) {
   const room = rooms[code];
   const id = 'p' + Math.random().toString(36).slice(2, 9);
   const color = COLORS[room.colorIdx % COLORS.length];
   room.colorIdx += 1;
   const resolvedClassId = CLASSES[classId] ? classId : 'soldado';
+  const resolvedAvatar = (typeof avatar === 'string' && avatar.length > 0 && avatar.length < AVATAR_MAX_LEN && avatar.startsWith('data:image/'))
+    ? avatar : null;
 
   const player = {
     id,
@@ -390,6 +399,7 @@ function addPlayerToRoom(ws, code, name, classId) {
     stats: defaultStats(),
     classId: resolvedClassId,
     kills: 0,
+    avatar: resolvedAvatar,
   };
   applyClass(player, resolvedClassId);
   room.players[id] = player;
@@ -401,6 +411,16 @@ function addPlayerToRoom(ws, code, name, classId) {
   ws.roomCode = code;
   ws.playerId = id;
   ws.send(JSON.stringify({ type: 'joined', id, color, room: code, classId: resolvedClassId, isPublic: room.isPublic }));
+
+  // manda pro recém-chegado os avatares de quem já está na sala
+  for (const [pid, pl] of Object.entries(room.players)) {
+    if (pid !== id && pl.avatar) {
+      ws.send(JSON.stringify({ type: 'avatar', playerId: pid, avatar: pl.avatar }));
+    }
+  }
+  // avisa a sala inteira do avatar do recém-chegado (se tiver)
+  if (resolvedAvatar) broadcastAvatar(code, id, resolvedAvatar);
+
   broadcastSystemMessage(code, `${player.name} entrou na sala.`);
 }
 
@@ -441,7 +461,7 @@ wss.on('connection', (ws) => {
     if (msg.type === 'create') {
       const code = generateRoomCode();
       rooms[code] = createRoom(!!msg.isPublic);
-      addPlayerToRoom(ws, code, msg.name, msg.classId);
+      addPlayerToRoom(ws, code, msg.name, msg.classId, msg.avatar);
 
     } else if (msg.type === 'join') {
       const code = (msg.room || '').toUpperCase().trim();
@@ -449,7 +469,7 @@ wss.on('connection', (ws) => {
         ws.send(JSON.stringify({ type: 'error', message: 'Sala não encontrada. Confira o código.' }));
         return;
       }
-      addPlayerToRoom(ws, code, msg.name, msg.classId);
+      addPlayerToRoom(ws, code, msg.name, msg.classId, msg.avatar);
 
     } else if (msg.type === 'leave') {
       removePlayerFromRoom(ws);

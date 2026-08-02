@@ -135,6 +135,12 @@ estático. Você ainda pode manter o repositório no GitHub normalmente, só o
   sistema (entrada/saída de jogadores, nova onda, abertura da loja)
 - **Placar de abates**: contador de inimigos derrotados por jogador, exibido
   junto ao nome na arena e num placar logo abaixo dela
+- **Foto do personagem (skin)**: no lobby, dá pra escolher uma imagem da
+  galeria/câmera do celular (ou arquivo no PC) — ela é redimensionada
+  automaticamente e aparece dentro da bolinha do seu personagem pra todo
+  mundo na sala ver. Sem foto, continua a cor padrão.
+- **Números de dano flutuantes** ao acertar os inimigos
+- Onda dura **1 minuto** antes da loja abrir (era 15s)
 
 ## Ideias pra evoluir depois
 

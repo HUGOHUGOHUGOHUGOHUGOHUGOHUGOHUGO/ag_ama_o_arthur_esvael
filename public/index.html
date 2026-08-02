@@ -56,6 +56,21 @@
   }
   .visBtn.selected { border-color: #5dd8ff; color: #5dd8ff; background: #10222b; }
 
+  /* foto do jogador */
+  .avatarRow { display: flex; align-items: center; gap: 14px; }
+  #avatarPreview {
+    width: 56px; height: 56px; border-radius: 50%; background: #14161c;
+    border: 2px solid #3a3f4f; background-size: cover; background-position: center;
+    flex-shrink: 0;
+  }
+  .avatarButtons { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .fileBtn, .clearBtn {
+    display: block; text-align: center; padding: 9px; border-radius: 6px;
+    font-size: 12px; font-weight: bold; cursor: pointer; touch-action: manipulation;
+  }
+  .fileBtn { background: #2a2f3d; color: #eee; }
+  .clearBtn { background: transparent; border: 1px solid #3a3f4f; color: #999; width: 100%; }
+
   /* lista de salas públicas — SEM scroll interno (evita capturar o gesto de
      rolagem da página inteira em navegadores in-app problemáticos) */
   #roomListSection { display: flex; flex-direction: column; gap: 8px; }
@@ -164,6 +179,18 @@
     <div class="lobby-section">
       <label for="nameInput">Seu nome (opcional)</label>
       <input id="nameInput" maxlength="16" placeholder="Ex: Zé">
+    </div>
+
+    <div class="lobby-section">
+      <label>Foto do personagem (opcional)</label>
+      <div class="avatarRow">
+        <div id="avatarPreview"></div>
+        <div class="avatarButtons">
+          <label class="fileBtn" for="avatarInput">Escolher foto</label>
+          <input type="file" id="avatarInput" accept="image/*" style="display:none">
+          <button type="button" id="avatarClearBtn" class="clearBtn">Remover</button>
+        </div>
+      </div>
     </div>
 
     <div class="lobby-section">

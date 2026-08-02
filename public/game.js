@@ -61,6 +61,9 @@ const chatPanel = document.getElementById('chatPanel');
 const chatMessagesEl = document.getElementById('chatMessages');
 const chatInput = document.getElementById('chatInput');
 const chatSendBtn = document.getElementById('chatSendBtn');
+const avatarInput = document.getElementById('avatarInput');
+const avatarPreview = document.getElementById('avatarPreview');
+const avatarClearBtn = document.getElementById('avatarClearBtn');
 
 roomInput.addEventListener('input', () => {
   roomInput.value = roomInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -92,13 +95,54 @@ let isPublic = false;
 visPrivateBtn.onclick = () => { isPublic = false; visPrivateBtn.classList.add('selected'); visPublicBtn.classList.remove('selected'); };
 visPublicBtn.onclick = () => { isPublic = true; visPublicBtn.classList.add('selected'); visPrivateBtn.classList.remove('selected'); };
 
+// ---------- Foto do jogador (skin) ----------
+let selectedAvatar = null; // dataURL já redimensionado, ou null
+
+function resizeImageToDataUrl(file, maxSize, cb) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const off = document.createElement('canvas');
+      off.width = w; off.height = h;
+      off.getContext('2d').drawImage(img, 0, 0, w, h);
+      cb(off.toDataURL('image/jpeg', 0.72));
+    };
+    img.onerror = () => cb(null);
+    img.src = e.target.result;
+  };
+  reader.onerror = () => cb(null);
+  reader.readAsDataURL(file);
+}
+
+avatarInput.addEventListener('change', () => {
+  const file = avatarInput.files && avatarInput.files[0];
+  if (!file) return;
+  resizeImageToDataUrl(file, 96, (dataUrl) => {
+    if (!dataUrl) { lobbyMsg.textContent = 'Não consegui ler essa imagem, tenta outra.'; return; }
+    selectedAvatar = dataUrl;
+    avatarPreview.style.backgroundImage = `url(${dataUrl})`;
+  });
+});
+avatarClearBtn.onclick = () => {
+  selectedAvatar = null;
+  avatarInput.value = '';
+  avatarPreview.style.backgroundImage = '';
+};
+
 let myId = null;
 let myRoom = null;
 let joined = false;
 let latestState = null;
 let lastShopRenderKey = null;
 let chosenThisShop = false;
+let prevEnemyHp = new Map(); // id -> hp do frame anterior
+let floatingTexts = []; // números de dano flutuantes
 let roomListInterval = null;
+const avatarImages = new Map(); // playerId -> HTMLImageElement carregado
 
 // ---------- WebSocket ----------
 const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
@@ -132,6 +176,7 @@ ws.onmessage = (evt) => {
     statusEl.textContent = 'Na sala ' + myRoom + (msg.isPublic ? ' (pública)' : ' (privada)') + '.';
     chatMessagesEl.innerHTML = '';
     chatPanel.classList.add('open'); // chat visível por padrão
+    avatarImages.clear();
 
   } else if (msg.type === 'left') {
     joined = false;
@@ -153,11 +198,25 @@ ws.onmessage = (evt) => {
     renderRoomList(msg.rooms);
 
   } else if (msg.type === 'state') {
+    const newHp = new Map();
+    for (const e of msg.enemies) {
+      newHp.set(e.id, e.hp);
+      const prev = prevEnemyHp.get(e.id);
+      if (prev !== undefined && prev - e.hp > 0.5) {
+        floatingTexts.push({ x: e.x, y: e.y, text: '-' + Math.round(prev - e.hp), start: performance.now(), duration: 650 });
+      }
+    }
+    prevEnemyHp = newHp;
     latestState = msg;
     updateShopUI();
 
   } else if (msg.type === 'chat_message') {
     addChatLine(msg.name, msg.color, msg.text, msg.system);
+
+  } else if (msg.type === 'avatar') {
+    const img = new Image();
+    img.onload = () => { avatarImages.set(msg.playerId, img); };
+    img.src = msg.avatar;
   }
 };
 
@@ -184,7 +243,7 @@ function renderRoomList(rooms) {
     btn.textContent = 'Entrar';
     btn.onclick = () => {
       lobbyMsg.textContent = '';
-      ws.send(JSON.stringify({ type: 'join', room: r.code, name: nameInput.value.trim(), classId: selectedClass }));
+      ws.send(JSON.stringify({ type: 'join', room: r.code, name: nameInput.value.trim(), classId: selectedClass, avatar: selectedAvatar }));
     };
     row.appendChild(btn);
     roomListEl.appendChild(row);
@@ -194,7 +253,7 @@ function renderRoomList(rooms) {
 createBtn.onclick = () => {
   if (ws.readyState !== 1) return;
   lobbyMsg.textContent = '';
-  ws.send(JSON.stringify({ type: 'create', name: nameInput.value.trim(), classId: selectedClass, isPublic }));
+  ws.send(JSON.stringify({ type: 'create', name: nameInput.value.trim(), classId: selectedClass, isPublic, avatar: selectedAvatar }));
 };
 
 joinBtn.onclick = () => {
@@ -205,7 +264,7 @@ joinBtn.onclick = () => {
     return;
   }
   lobbyMsg.textContent = '';
-  ws.send(JSON.stringify({ type: 'join', room: code, name: nameInput.value.trim(), classId: selectedClass }));
+  ws.send(JSON.stringify({ type: 'join', room: code, name: nameInput.value.trim(), classId: selectedClass, avatar: selectedAvatar }));
 };
 
 leaveBtn.onclick = () => {
@@ -371,23 +430,36 @@ function drawPlayer(p) {
   ctx.save();
   ctx.globalAlpha = p.alive ? 1 : 0.25;
 
+  const img = avatarImages.get(p.id);
+  if (img) {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
+    ctx.save();
+    ctx.clip();
+    ctx.drawImage(img, p.x - 14, p.y - 14, 28, 28);
+    ctx.restore();
+  } else {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
+    ctx.fillStyle = p.color;
+    ctx.fill();
+
+    // textura de relevo: brilho no canto superior-esquerdo, sombra embaixo
+    const bevel = ctx.createRadialGradient(p.x - 5, p.y - 6, 1, p.x, p.y, 15);
+    bevel.addColorStop(0, 'rgba(255,255,255,0.55)');
+    bevel.addColorStop(0.5, 'rgba(255,255,255,0)');
+    bevel.addColorStop(1, 'rgba(0,0,0,0.28)');
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
+    ctx.fillStyle = bevel;
+    ctx.fill();
+  }
+
+  // anel com a cor do jogador — identifica quem é quem mesmo com foto
   ctx.beginPath();
   ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
-  ctx.fillStyle = p.color;
-  ctx.fill();
-
-  // textura de relevo: brilho no canto superior-esquerdo, sombra embaixo
-  const bevel = ctx.createRadialGradient(p.x - 5, p.y - 6, 1, p.x, p.y, 15);
-  bevel.addColorStop(0, 'rgba(255,255,255,0.55)');
-  bevel.addColorStop(0.5, 'rgba(255,255,255,0)');
-  bevel.addColorStop(1, 'rgba(0,0,0,0.28)');
-  ctx.beginPath();
-  ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
-  ctx.fillStyle = bevel;
-  ctx.fill();
-
-  ctx.lineWidth = p.id === myId ? 3 : 1;
-  ctx.strokeStyle = p.id === myId ? '#fff' : '#0008';
+  ctx.lineWidth = p.id === myId ? 3 : 2;
+  ctx.strokeStyle = p.id === myId ? '#fff' : p.color;
   ctx.stroke();
 
   const barW = 32;
@@ -517,6 +589,20 @@ function render() {
       const label = (p.id === myId ? 'você' : p.name);
       return `<div class="scoreItem">${label}: <b>${p.kills || 0}</b> ☠</div>`;
     }).join('');
+  }
+
+  // números de dano flutuantes
+  const now = performance.now();
+  floatingTexts = floatingTexts.filter((f) => now - f.start < f.duration);
+  for (const f of floatingTexts) {
+    const t = (now - f.start) / f.duration;
+    ctx.save();
+    ctx.globalAlpha = 1 - t;
+    ctx.fillStyle = '#fff7d6';
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(f.text, f.x, f.y - 20 - t * 22);
+    ctx.restore();
   }
 
   // vinheta sutil nas bordas — dá profundidade sem escurecer o centro
