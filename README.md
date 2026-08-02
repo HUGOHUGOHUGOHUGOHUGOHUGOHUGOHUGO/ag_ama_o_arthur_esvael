@@ -108,6 +108,29 @@ estático. Você ainda pode manter o repositório no GitHub normalmente, só o
 - Ataque: automático (pistola dispara no inimigo mais próximo, espada bate em
   área ao redor do personagem)
 
+## Arquitetura: salas públicas vs privadas (importante!)
+
+- **Sala pública**: o jogo roda no servidor (Render), como sempre. Todo mundo
+  se conecta nele.
+- **Sala privada**: quem **cria** a sala vira o "servidor" dela — o jogo roda
+  no navegador dessa pessoa, e quem entra conecta **direto** com o PC dela via
+  WebRTC (P2P), sem passar o tempo todo pelo servidor na nuvem. O servidor só
+  ajuda os dois PCs a se acharem no início (isso é tecnicamente inevitável —
+  navegador nenhum acha o outro sozinho).
+
+  **Limitações importantes do modo P2P**, pra você saber o que esperar:
+  - Quem criou a sala precisa **manter a aba aberta** — se ela fechar, a sala
+    acaba pra todo mundo.
+  - A internet e o PC de quem criou viram o "gargalo" da sala inteira.
+  - Não tem servidor de reforço (TURN) — em redes muito restritas (algumas
+    redes corporativas, certas operadoras de celular) a conexão direta pode
+    falhar. Não tem fallback automático pra sala pública nesse caso; se isso
+    acontecer, o jeito é usar sala pública mesmo.
+  - **Isso não foi testado em dispositivos reais** — a lógica de sinalização
+    (o "correio" que ajuda os PCs se acharem) foi testada de ponta a ponta,
+    mas a conexão WebRTC de verdade entre dois navegadores/redes diferentes
+    só dá pra confirmar testando ao vivo.
+
 ## O que já tem (protótipo)
 
 - Multiplayer real via WebSocket, servidor autoritativo
@@ -135,12 +158,20 @@ estático. Você ainda pode manter o repositório no GitHub normalmente, só o
   sistema (entrada/saída de jogadores, nova onda, abertura da loja)
 - **Placar de abates**: contador de inimigos derrotados por jogador, exibido
   junto ao nome na arena e num placar logo abaixo dela
+- **Onda acaba na hora** se todos os inimigos forem derrotados, sem precisar
+  esperar o minuto todo
+- **Escolha de arma**: Pistola (à distância) ou Espada (corpo-a-corpo) — só
+  uma fica ativa, mostrada num indicador no HUD
+- **Modo de ataque**: Automático (ataca sozinho, como sempre) ou Manual
+  (segurar ESPAÇO no PC ou o botão ATACAR no celular)
+- **Sons** sintetizados (sem arquivos externos) pra tiro, acerto, abate, dano
+  recebido, nova onda, chefe aparecendo e loja abrindo
 - **Foto do personagem (skin)**: no lobby, dá pra escolher uma imagem da
   galeria/câmera do celular (ou arquivo no PC) — ela é redimensionada
   automaticamente e aparece dentro da bolinha do seu personagem pra todo
   mundo na sala ver. Sem foto, continua a cor padrão.
 - **Números de dano flutuantes** ao acertar os inimigos
-- Onda dura **1 minuto** antes da loja abrir (era 15s)
+- Onda dura até **1 minuto** (ou menos, se limpar tudo antes)
 
 ## Ideias pra evoluir depois
 

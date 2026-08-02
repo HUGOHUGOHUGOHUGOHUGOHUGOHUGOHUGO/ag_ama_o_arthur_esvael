@@ -55,6 +55,19 @@
     background: #14161c; color: #999; font-size: 12.5px; font-weight: bold;
   }
   .visBtn.selected { border-color: #5dd8ff; color: #5dd8ff; background: #10222b; }
+  #manualHint { font-size: 11px; color: #666; margin-top: 8px; }
+
+  #weaponBadge {
+    background: #2a2f3d; padding: 4px 10px; border-radius: 6px; font-size: 11px;
+    color: #ffd75d; font-weight: bold;
+  }
+
+  /* botão de ataque manual (mobile) */
+  #attackBtn {
+    display: none; width: 74px; height: 74px; border-radius: 50%; background: rgba(255,93,93,0.25);
+    border: 2px solid rgba(255,93,93,0.6); color: #ff9d9d; font-size: 11px; font-weight: bold;
+    touch-action: manipulation; user-select: none;
+  }
 
   /* foto do jogador */
   .avatarRow { display: flex; align-items: center; gap: 14px; }
@@ -199,6 +212,20 @@
     </div>
 
     <div class="lobby-section">
+      <label>Arma</label>
+      <div class="visToggle">
+        <button type="button" class="visBtn selected" id="weaponPistol">🔫 Pistola</button>
+        <button type="button" class="visBtn" id="weaponMelee">🗡️ Espada</button>
+      </div>
+      <label style="margin-top:10px">Modo de ataque</label>
+      <div class="visToggle">
+        <button type="button" class="visBtn selected" id="modeAuto">🎯 Automático</button>
+        <button type="button" class="visBtn" id="modeManual">👆 Manual</button>
+      </div>
+      <div id="manualHint" style="display:none">Segure ESPAÇO (PC) ou o botão ATACAR (celular) pra atacar.</div>
+    </div>
+
+    <div class="lobby-section">
       <label>Tipo de sala</label>
       <div class="visToggle">
         <button type="button" class="visBtn selected" id="visPrivate">🔒 Privada</button>
@@ -229,6 +256,7 @@
   <div id="gameScreen">
     <div id="hud">
       <div id="roomBadge">SALA: <span id="roomCode">----</span></div>
+      <div id="weaponBadge">🔫 Pistola</div>
       <div>Onda: <span id="wave">0</span></div>
       <div>Próxima: <span id="waveTimer">--</span>s</div>
       <div>Jogadores: <span id="playerCount">0</span></div>
@@ -261,9 +289,11 @@
         <div id="joystick"><div id="joystickKnob"></div></div>
         <div id="joystickHint">arraste pra mover</div>
       </div>
+      <button id="attackBtn" style="margin-left:28px">ATACAR</button>
     </div>
   </div>
 </div>
+<script src="engine.js"></script>
 <script src="game.js"></script>
 </body>
 </html>
