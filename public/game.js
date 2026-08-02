@@ -75,6 +75,8 @@ const CLASSES = [
   { id: 'berserker', label: '🪓 Berserker', desc: 'Espada forte, menos vida' },
   { id: 'tanque', label: '🛡️ Tanque', desc: '+50% vida, mais lento' },
   { id: 'ninja', label: '🥷 Ninja', desc: 'Rápido e ágil, menos vida' },
+  { id: 'atirador', label: '🎯 Atirador', desc: '+alcance e dano, menos vida' },
+  { id: 'vampiro', label: '🧛 Vampiro', desc: 'Regenera vida, começa frágil' },
 ];
 let selectedClass = 'soldado';
 
@@ -480,13 +482,24 @@ function drawPlayer(p) {
   ctx.restore();
 }
 
+const ENEMY_COLORS = {
+  normal: '#ff5d5d',
+  fast: '#ff9d5d',
+  swarm: '#8dff5d',
+  tank: '#7a5dff',
+  boss: '#ff2fd0',
+};
+const ENEMY_RIM = {
+  normal: '#7a1010', fast: '#7a1010', swarm: '#2f6b12', tank: '#2f1a7a', boss: '#6b0f5c',
+};
+
 function drawEnemy(e) {
   ctx.save();
-  const r = e.typeId === 'fast' ? 9 : 12;
-  const baseColor = e.typeId === 'fast' ? '#ff9d5d' : '#ff5d5d';
+  const r = e.radius || 12;
+  const baseColor = ENEMY_COLORS[e.typeId] || '#ff5d5d';
+  const rim = ENEMY_RIM[e.typeId] || '#7a1010';
 
   if (e.typeId === 'fast') {
-    // rastro de movimento — reforça a sensação de velocidade
     ctx.strokeStyle = 'rgba(255,157,93,0.45)';
     ctx.lineWidth = 2;
     for (let i = 0; i < 3; i++) {
@@ -496,33 +509,45 @@ function drawEnemy(e) {
       ctx.lineTo(e.x - off - 6, e.y - r / 2 + i * 3);
       ctx.stroke();
     }
-  } else {
-    // espinhos ao redor — textura de criatura hostil
-    ctx.fillStyle = '#7a1010';
-    const spikes = 8;
+  } else if (e.typeId === 'normal' || e.typeId === 'tank' || e.typeId === 'boss') {
+    const spikes = e.typeId === 'boss' ? 12 : (e.typeId === 'tank' ? 10 : 8);
+    const spikeLen = e.typeId === 'boss' ? 9 : 5;
+    ctx.fillStyle = rim;
     for (let i = 0; i < spikes; i++) {
       const ang = (i / spikes) * Math.PI * 2;
       const bx = e.x + Math.cos(ang) * r * 0.85, by = e.y + Math.sin(ang) * r * 0.85;
-      const tx = e.x + Math.cos(ang) * (r + 5), ty = e.y + Math.sin(ang) * (r + 5);
+      const tx = e.x + Math.cos(ang) * (r + spikeLen), ty = e.y + Math.sin(ang) * (r + spikeLen);
       const perp = ang + Math.PI / 2;
+      const w = e.typeId === 'boss' ? 3 : 2.2;
       ctx.beginPath();
-      ctx.moveTo(bx + Math.cos(perp) * 2.2, by + Math.sin(perp) * 2.2);
+      ctx.moveTo(bx + Math.cos(perp) * w, by + Math.sin(perp) * w);
       ctx.lineTo(tx, ty);
-      ctx.lineTo(bx - Math.cos(perp) * 2.2, by - Math.sin(perp) * 2.2);
+      ctx.lineTo(bx - Math.cos(perp) * w, by - Math.sin(perp) * w);
       ctx.closePath();
       ctx.fill();
     }
+  }
+
+  if (e.typeId === 'boss') {
+    // brilho pulsante ao redor do chefe
+    const pulse = 4 + Math.sin(performance.now() / 220) * 3;
+    const glow = ctx.createRadialGradient(e.x, e.y, r, e.x, e.y, r + 14 + pulse);
+    glow.addColorStop(0, 'rgba(255,47,208,0.35)');
+    glow.addColorStop(1, 'rgba(255,47,208,0)');
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, r + 14 + pulse, 0, Math.PI * 2);
+    ctx.fillStyle = glow;
+    ctx.fill();
   }
 
   ctx.beginPath();
   ctx.arc(e.x, e.y, r, 0, Math.PI * 2);
   ctx.fillStyle = baseColor;
   ctx.fill();
-  ctx.strokeStyle = '#7a1010';
+  ctx.strokeStyle = rim;
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
-  // textura de relevo (casca/couraça)
   const bevel = ctx.createRadialGradient(e.x - 3, e.y - 4, 1, e.x, e.y, r + 2);
   bevel.addColorStop(0, 'rgba(255,255,255,0.35)');
   bevel.addColorStop(0.55, 'rgba(255,255,255,0)');
@@ -532,11 +557,18 @@ function drawEnemy(e) {
   ctx.fillStyle = bevel;
   ctx.fill();
 
-  const barW = 26;
+  if (e.typeId === 'boss') {
+    ctx.fillStyle = '#ff2fd0';
+    ctx.font = 'bold 11px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('☠ CHEFE ☠', e.x, e.y - r - 16);
+  }
+
+  const barW = Math.max(26, r * 2.1);
   ctx.fillStyle = '#0008';
-  ctx.fillRect(e.x - barW / 2, e.y - 20, barW, 4);
+  ctx.fillRect(e.x - barW / 2, e.y - r - 8, barW, 4);
   ctx.fillStyle = '#ffd75d';
-  ctx.fillRect(e.x - barW / 2, e.y - 20, barW * Math.max(0, e.hp / e.maxHp), 4);
+  ctx.fillRect(e.x - barW / 2, e.y - r - 8, barW * Math.max(0, e.hp / e.maxHp), 4);
   ctx.restore();
 }
 
