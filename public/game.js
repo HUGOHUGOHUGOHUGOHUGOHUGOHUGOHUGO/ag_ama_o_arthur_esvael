@@ -27,6 +27,11 @@ const visPublicBtn = document.getElementById('visPublic');
 const roomListEl = document.getElementById('roomList');
 const roomListEmptyEl = document.getElementById('roomListEmpty');
 const refreshBtn = document.getElementById('refreshBtn');
+const chatToggleBtn = document.getElementById('chatToggleBtn');
+const chatPanel = document.getElementById('chatPanel');
+const chatMessagesEl = document.getElementById('chatMessages');
+const chatInput = document.getElementById('chatInput');
+const chatSendBtn = document.getElementById('chatSendBtn');
 
 roomInput.addEventListener('input', () => {
   roomInput.value = roomInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -96,6 +101,7 @@ ws.onmessage = (evt) => {
     lobby.style.display = 'none';
     gameScreen.style.display = 'flex';
     statusEl.textContent = 'Na sala ' + myRoom + (msg.isPublic ? ' (pública)' : ' (privada)') + '.';
+    chatMessagesEl.innerHTML = '';
 
   } else if (msg.type === 'left') {
     joined = false;
@@ -103,6 +109,7 @@ ws.onmessage = (evt) => {
     myRoom = null;
     latestState = null;
     lastShopRenderKey = null;
+    chatPanel.classList.remove('open');
     gameScreen.style.display = 'none';
     lobby.style.display = 'flex';
     lobbyStatus.textContent = 'Você saiu da sala.';
@@ -118,6 +125,9 @@ ws.onmessage = (evt) => {
   } else if (msg.type === 'state') {
     latestState = msg;
     updateShopUI();
+
+  } else if (msg.type === 'chat_message') {
+    addChatLine(msg.name, msg.color, msg.text, msg.system);
   }
 };
 
@@ -177,6 +187,41 @@ leaveBtn.onclick = () => {
 roomInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') joinBtn.click(); });
 nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') createBtn.click(); });
 
+// ---------- Chat ----------
+chatToggleBtn.onclick = () => chatPanel.classList.toggle('open');
+
+function addChatLine(name, color, text, isSystem) {
+  const line = document.createElement('div');
+  line.className = 'chatLine' + (isSystem ? ' system' : '');
+  if (!isSystem) {
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'chatName';
+    nameSpan.style.color = color || '#ccc';
+    nameSpan.textContent = name + ':';
+    line.appendChild(nameSpan);
+    line.appendChild(document.createTextNode(' ' + text));
+  } else {
+    line.textContent = text;
+  }
+  chatMessagesEl.appendChild(line);
+  while (chatMessagesEl.children.length > 100) {
+    chatMessagesEl.removeChild(chatMessagesEl.firstChild);
+  }
+  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+}
+
+function sendChat() {
+  const text = chatInput.value.trim();
+  if (!text || ws.readyState !== 1) return;
+  ws.send(JSON.stringify({ type: 'chat', text }));
+  chatInput.value = '';
+}
+chatSendBtn.onclick = sendChat;
+chatInput.addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (e.key === 'Enter') { e.preventDefault(); sendChat(); }
+});
+
 // ---------- Input: teclado ----------
 const keys = { up: false, down: false, left: false, right: false };
 const KEYMAP = {
@@ -185,7 +230,12 @@ const KEYMAP = {
   KeyA: 'left', ArrowLeft: 'left',
   KeyD: 'right', ArrowRight: 'right',
 };
+function isTypingTarget() {
+  const el = document.activeElement;
+  return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA');
+}
 window.addEventListener('keydown', (e) => {
+  if (isTypingTarget()) return;
   const k = KEYMAP[e.code];
   if (k) keys[k] = true;
 });
