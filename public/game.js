@@ -16,6 +16,34 @@ const waveTimerEl = document.getElementById('waveTimer');
 const playerCountEl = document.getElementById('playerCount');
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
+
+// ---------- Textura do chão (ruído procedural, sem imagens externas) ----------
+function createFloorTexture() {
+  const size = 140;
+  const off = document.createElement('canvas');
+  off.width = size; off.height = size;
+  const octx = off.getContext('2d');
+  octx.fillStyle = '#202430';
+  octx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 160; i++) {
+    const x = Math.random() * size, y = Math.random() * size;
+    const r = Math.random() * 1.5 + 0.3;
+    octx.beginPath();
+    octx.arc(x, y, r, 0, Math.PI * 2);
+    octx.fillStyle = `rgba(255,255,255,${(Math.random() * 0.05 + 0.015).toFixed(3)})`;
+    octx.fill();
+  }
+  for (let i = 0; i < 70; i++) {
+    const x = Math.random() * size, y = Math.random() * size;
+    const r = Math.random() * 1.3 + 0.3;
+    octx.beginPath();
+    octx.arc(x, y, r, 0, Math.PI * 2);
+    octx.fillStyle = `rgba(0,0,0,${(Math.random() * 0.14 + 0.05).toFixed(3)})`;
+    octx.fill();
+  }
+  return ctx.createPattern(off, 'repeat');
+}
+const floorTexture = createFloorTexture();
 const shopOverlay = document.getElementById('shopOverlay');
 const shopOptionsEl = document.getElementById('shopOptions');
 const shopTimerEl = document.getElementById('shopTimer');
@@ -342,10 +370,22 @@ function updateShopUI() {
 function drawPlayer(p) {
   ctx.save();
   ctx.globalAlpha = p.alive ? 1 : 0.25;
+
   ctx.beginPath();
   ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
   ctx.fillStyle = p.color;
   ctx.fill();
+
+  // textura de relevo: brilho no canto superior-esquerdo, sombra embaixo
+  const bevel = ctx.createRadialGradient(p.x - 5, p.y - 6, 1, p.x, p.y, 15);
+  bevel.addColorStop(0, 'rgba(255,255,255,0.55)');
+  bevel.addColorStop(0.5, 'rgba(255,255,255,0)');
+  bevel.addColorStop(1, 'rgba(0,0,0,0.28)');
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
+  ctx.fillStyle = bevel;
+  ctx.fill();
+
   ctx.lineWidth = p.id === myId ? 3 : 1;
   ctx.strokeStyle = p.id === myId ? '#fff' : '#0008';
   ctx.stroke();
@@ -370,12 +410,55 @@ function drawPlayer(p) {
 
 function drawEnemy(e) {
   ctx.save();
+  const r = e.typeId === 'fast' ? 9 : 12;
+  const baseColor = e.typeId === 'fast' ? '#ff9d5d' : '#ff5d5d';
+
+  if (e.typeId === 'fast') {
+    // rastro de movimento — reforça a sensação de velocidade
+    ctx.strokeStyle = 'rgba(255,157,93,0.45)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 3; i++) {
+      const off = 6 + i * 5;
+      ctx.beginPath();
+      ctx.moveTo(e.x - off, e.y - r / 2 + i * 3);
+      ctx.lineTo(e.x - off - 6, e.y - r / 2 + i * 3);
+      ctx.stroke();
+    }
+  } else {
+    // espinhos ao redor — textura de criatura hostil
+    ctx.fillStyle = '#7a1010';
+    const spikes = 8;
+    for (let i = 0; i < spikes; i++) {
+      const ang = (i / spikes) * Math.PI * 2;
+      const bx = e.x + Math.cos(ang) * r * 0.85, by = e.y + Math.sin(ang) * r * 0.85;
+      const tx = e.x + Math.cos(ang) * (r + 5), ty = e.y + Math.sin(ang) * (r + 5);
+      const perp = ang + Math.PI / 2;
+      ctx.beginPath();
+      ctx.moveTo(bx + Math.cos(perp) * 2.2, by + Math.sin(perp) * 2.2);
+      ctx.lineTo(tx, ty);
+      ctx.lineTo(bx - Math.cos(perp) * 2.2, by - Math.sin(perp) * 2.2);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
   ctx.beginPath();
-  ctx.arc(e.x, e.y, e.typeId === 'fast' ? 9 : 12, 0, Math.PI * 2);
-  ctx.fillStyle = e.typeId === 'fast' ? '#ff9d5d' : '#ff5d5d';
+  ctx.arc(e.x, e.y, r, 0, Math.PI * 2);
+  ctx.fillStyle = baseColor;
   ctx.fill();
   ctx.strokeStyle = '#7a1010';
+  ctx.lineWidth = 1.5;
   ctx.stroke();
+
+  // textura de relevo (casca/couraça)
+  const bevel = ctx.createRadialGradient(e.x - 3, e.y - 4, 1, e.x, e.y, r + 2);
+  bevel.addColorStop(0, 'rgba(255,255,255,0.35)');
+  bevel.addColorStop(0.55, 'rgba(255,255,255,0)');
+  bevel.addColorStop(1, 'rgba(0,0,0,0.32)');
+  ctx.beginPath();
+  ctx.arc(e.x, e.y, r, 0, Math.PI * 2);
+  ctx.fillStyle = bevel;
+  ctx.fill();
 
   const barW = 26;
   ctx.fillStyle = '#0008';
@@ -386,14 +469,29 @@ function drawEnemy(e) {
 }
 
 function drawBullet(b) {
+  const glow = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, 7);
+  glow.addColorStop(0, 'rgba(255,247,214,0.9)');
+  glow.addColorStop(0.45, 'rgba(255,233,141,0.6)');
+  glow.addColorStop(1, 'rgba(255,233,141,0)');
   ctx.beginPath();
-  ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
-  ctx.fillStyle = '#ffe98d';
+  ctx.arc(b.x, b.y, 7, 0, Math.PI * 2);
+  ctx.fillStyle = glow;
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(b.x, b.y, 2.5, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff7d6';
   ctx.fill();
 }
 
 function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (floorTexture) {
+    ctx.fillStyle = floorTexture;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
   ctx.strokeStyle = '#2a2f3d';
   ctx.lineWidth = 1;
   for (let x = 0; x < canvas.width; x += 40) {
@@ -420,6 +518,16 @@ function render() {
       return `<div class="scoreItem">${label}: <b>${p.kills || 0}</b> ☠</div>`;
     }).join('');
   }
+
+  // vinheta sutil nas bordas — dá profundidade sem escurecer o centro
+  const vignette = ctx.createRadialGradient(
+    canvas.width / 2, canvas.height / 2, canvas.height * 0.35,
+    canvas.width / 2, canvas.height / 2, canvas.height * 0.85
+  );
+  vignette.addColorStop(0, 'rgba(0,0,0,0)');
+  vignette.addColorStop(1, 'rgba(0,0,0,0.35)');
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   requestAnimationFrame(render);
 }
