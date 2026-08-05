@@ -157,6 +157,25 @@ wss.on('connection', (ws) => {
       const room = rooms[ws.roomCode];
       if (room) room.engine.sendChat(ws.playerId, msg.text);
 
+    } else if (msg.type === 'admin_login') {
+      const room = rooms[ws.roomCode];
+      if (room) {
+        const ok = room.engine.loginAdmin(ws.playerId, msg.username, msg.password);
+        ws.send(JSON.stringify({ type: 'admin_login_result', success: ok }));
+      }
+
+    } else if (msg.type === 'admin_spawn') {
+      const room = rooms[ws.roomCode];
+      if (room) room.engine.adminSpawnEnemy(ws.playerId, msg.typeId);
+
+    } else if (msg.type === 'admin_upgrade') {
+      const room = rooms[ws.roomCode];
+      if (room) room.engine.adminGiveUpgrade(ws.playerId, msg.upgradeId);
+
+    } else if (msg.type === 'admin_skip') {
+      const room = rooms[ws.roomCode];
+      if (room) room.engine.adminSkipPhase(ws.playerId);
+
     // ---------- Sinalização WebRTC (só isso passa pelo servidor em salas privadas) ----------
     } else if (msg.type === 'p2p_signal') {
       // encaminha oferta/resposta/ICE candidates entre o host e um peer específico,

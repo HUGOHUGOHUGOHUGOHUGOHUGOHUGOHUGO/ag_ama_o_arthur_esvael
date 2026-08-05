@@ -160,12 +160,27 @@ estático. Você ainda pode manter o repositório no GitHub normalmente, só o
   junto ao nome na arena e num placar logo abaixo dela
 - **Onda acaba na hora** se todos os inimigos forem derrotados, sem precisar
   esperar o minuto todo
-- **Escolha de arma**: Pistola (à distância) ou Espada (corpo-a-corpo) — só
-  uma fica ativa, mostrada num indicador no HUD
-- **Modo de ataque**: Automático (ataca sozinho, como sempre) ou Manual
-  (segurar ESPAÇO no PC ou o botão ATACAR no celular)
+- **Escolha de arma**: Pistola, Espada ou Ambas — aparece um ícone da arma
+  equipada junto ao personagem na arena
+- **Modo de ataque**: Automático (ataca sozinho) ou Manual (segurar ESPAÇO no
+  PC ou o botão ATACAR no celular)
+- **8 classes**: Soldado, Berserker, Tanque, Ninja, Atirador, Vampiro,
+  Duelista (bônus equilibrado, ótimo com "Ambas") e Mercenário (generalista)
+- **Login de administrador** (opcional, link "🔑 Sou administrador" no lobby)
+  com painel pra spawnar inimigos (inclusive chefes), aplicar upgrades em si
+  mesmo e pular fase — *aviso: como o jogo roda no navegador, a senha fica
+  visível pra quem olhar o código-fonte; não é segurança de verdade, é mais
+  um "código de cheat" pro seu uso pessoal*
+- **Modo debug** (dentro do painel de admin): mostra FPS, contagem de
+  inimigos/balas/jogadores e seus próprios stats em tempo real
 - **Sons** sintetizados (sem arquivos externos) pra tiro, acerto, abate, dano
   recebido, nova onda, chefe aparecendo e loja abrindo
+- **Inimigo Atirador**: mantém distância e atira balas à distância (a partir
+  da onda 5) — obriga a se mexer em vez de só ficar parado atirando
+- **Botão de mudo** (persiste entre sessões no seu navegador)
+- **Copiar código da sala** com um toque (ícone 📋 no HUD)
+- **Recorde pessoal**: a maior onda que você já alcançou fica salva no seu
+  navegador e aparece no lobby
 - **Foto do personagem (skin)**: no lobby, dá pra escolher uma imagem da
   galeria/câmera do celular (ou arquivo no PC) — ela é redimensionada
   automaticamente e aparece dentro da bolinha do seu personagem pra todo

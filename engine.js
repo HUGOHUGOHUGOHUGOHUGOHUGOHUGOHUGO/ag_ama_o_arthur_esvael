@@ -44,12 +44,21 @@
     fast: { speedMult: 1.9, hpMult: 0.45, dmgMult: 0.6, radius: 9 },
     swarm: { speedMult: 1.35, hpMult: 0.28, dmgMult: 0.4, radius: 7 },
     tank: { speedMult: 0.6, hpMult: 2.4, dmgMult: 1.6, radius: 17 },
+    shooter: { speedMult: 0.75, hpMult: 0.55, dmgMult: 0.2, radius: 11 },
   };
+
+  const ENEMY_BULLET_SPEED = 3.5;
+  const ENEMY_BULLET_DMG = 10;
+  const ENEMY_BULLET_RADIUS = 5;
+  const SHOOTER_COOLDOWN = 1800;
+  const SHOOTER_PREFERRED_DIST = 260;
+  const SHOOTER_RANGE = 420;
 
   function pickEnemyType(wave) {
     const weights = { normal: 1 };
     if (wave >= 2) weights.swarm = 0.5;
     if (wave >= 4) weights.fast = Math.min(0.9, 0.3 + wave * 0.02);
+    if (wave >= 5) weights.shooter = Math.min(0.5, 0.15 + wave * 0.012);
     if (wave >= 6) weights.tank = Math.min(0.6, 0.15 + wave * 0.015);
     const entries = Object.entries(weights);
     const total = entries.reduce((s, [, w]) => s + w, 0);
@@ -77,6 +86,12 @@
     }},
     vampiro: { label: 'Vampiro', desc: 'Regenera vida com o tempo, começa mais frágil', apply: (p) => {
       p.stats.regenPerSec += p.maxHp * 0.015; p.maxHp = Math.round(p.maxHp * 0.9);
+    }},
+    duelista: { label: 'Duelista', desc: 'Bônus equilibrado nas duas armas — ótimo com "Ambas"', apply: (p) => {
+      p.stats.dmgMult *= 1.08; p.stats.atkSpeedMult *= 1.08;
+    }},
+    mercenario: { label: 'Mercenário', desc: '+5% em tudo, sem penalidades — o generalista', apply: (p) => {
+      p.stats.dmgMult *= 1.05; p.stats.atkSpeedMult *= 1.05; p.stats.moveSpeedMult *= 1.05;
     }},
   };
 
@@ -119,6 +134,9 @@
     if (u) u.apply(player);
   }
 
+  const ADMIN_USERNAME = 'hugo4055';
+  const ADMIN_PASSWORD = '2012hugo';
+
   function randEdgePosition() {
     const side = Math.floor(Math.random() * 4);
     if (side === 0) return { x: Math.random() * ARENA_W, y: -20 };
@@ -133,9 +151,9 @@
     const onChat = opts.onChat || function () {};
 
     const room = {
-      players: {}, enemies: [], bullets: [], wave: 0, waveTimer: 0, phase: 'wave',
+      players: {}, enemies: [], bullets: [], enemyBullets: [], wave: 0, waveTimer: 0, phase: 'wave',
       shopTimer: 0, shopOptions: {}, shopChosen: new Set(),
-      enemyIdCounter: 0, bulletIdCounter: 0, colorIdx: 0, bossSpawnCount: 0,
+      enemyIdCounter: 0, bulletIdCounter: 0, enemyBulletIdCounter: 0, colorIdx: 0, bossSpawnCount: 0,
     };
 
     function nearestEnemy(x, y, maxRange) {
@@ -174,7 +192,7 @@
         const hp = Math.max(6, Math.round(baseHp * type.hpMult));
         room.enemyIdCounter += 1;
         room.enemies.push({
-          id: room.enemyIdCounter, x: pos.x, y: pos.y, hp, maxHp: hp, lastContact: 0,
+          id: room.enemyIdCounter, x: pos.x, y: pos.y, hp, maxHp: hp, lastContact: 0, lastShot: 0,
           typeId, speed: ENEMY_SPEED * type.speedMult, radius: type.radius,
           contactDmg: ENEMY_CONTACT_DMG * type.dmgMult,
         });
@@ -265,7 +283,7 @@
 
         const wantsAttack = p.attackMode === 'manual' ? !!p.input.attack : true;
 
-        if (p.weapon === 'pistol') {
+        if (p.weapon === 'pistol' || p.weapon === 'both') {
           const pistolCooldown = PISTOL_COOLDOWN / p.stats.atkSpeedMult;
           if (wantsAttack && now - p.lastShot >= pistolCooldown) {
             const range = PISTOL_RANGE * p.stats.rangeMult;
@@ -283,7 +301,9 @@
               p.lastShot = now;
             }
           }
-        } else {
+        }
+
+        if (p.weapon === 'melee' || p.weapon === 'both') {
           const meleeCooldown = MELEE_COOLDOWN / p.stats.atkSpeedMult;
           if (wantsAttack && now - p.lastMelee >= meleeCooldown) {
             const radius = MELEE_RADIUS * p.stats.meleeRadiusMult;
@@ -327,10 +347,32 @@
       for (const e of room.enemies) {
         const target = nearestPlayer(e.x, e.y);
         if (target) {
-          const ang = Math.atan2(target.y - e.y, target.x - e.x);
-          e.x += Math.cos(ang) * e.speed;
-          e.y += Math.sin(ang) * e.speed;
           const d = Math.hypot(target.x - e.x, target.y - e.y);
+          const ang = Math.atan2(target.y - e.y, target.x - e.x);
+
+          if (e.typeId === 'shooter') {
+            // mantém distância: recua se perto demais, aproxima se longe demais
+            if (d < SHOOTER_PREFERRED_DIST - 30) {
+              e.x -= Math.cos(ang) * e.speed;
+              e.y -= Math.sin(ang) * e.speed;
+            } else if (d > SHOOTER_PREFERRED_DIST + 30) {
+              e.x += Math.cos(ang) * e.speed;
+              e.y += Math.sin(ang) * e.speed;
+            }
+            if (d <= SHOOTER_RANGE && now - e.lastShot >= SHOOTER_COOLDOWN) {
+              room.enemyBulletIdCounter += 1;
+              room.enemyBullets.push({
+                id: room.enemyBulletIdCounter, x: e.x, y: e.y,
+                vx: Math.cos(ang) * ENEMY_BULLET_SPEED, vy: Math.sin(ang) * ENEMY_BULLET_SPEED,
+                dmg: ENEMY_BULLET_DMG,
+              });
+              e.lastShot = now;
+            }
+          } else {
+            e.x += Math.cos(ang) * e.speed;
+            e.y += Math.sin(ang) * e.speed;
+          }
+
           if (d <= PLAYER_RADIUS + e.radius && now - e.lastContact >= ENEMY_CONTACT_COOLDOWN) {
             target.hp -= e.contactDmg;
             e.lastContact = now;
@@ -342,6 +384,19 @@
           }
         }
       }
+
+      room.enemyBullets = room.enemyBullets.filter((b) => {
+        b.x += b.vx; b.y += b.vy;
+        if (b.x < 0 || b.x > ARENA_W || b.y < 0 || b.y > ARENA_H) return false;
+        for (const p of alivePlayers()) {
+          if (Math.hypot(p.x - b.x, p.y - b.y) <= PLAYER_RADIUS + ENEMY_BULLET_RADIUS) {
+            p.hp -= b.dmg;
+            if (p.hp <= 0) { p.alive = false; p.respawnAt = now + RESPAWN_MS; }
+            return false;
+          }
+        }
+        return true;
+      });
 
       room.enemies = room.enemies.filter((e) => e.hp > 0);
 
@@ -366,18 +421,19 @@
         players: Object.values(room.players).map((p) => ({
           id: p.id, x: p.x, y: p.y, hp: p.hp, maxHp: p.maxHp,
           color: p.color, name: p.name, alive: p.alive, classId: p.classId, kills: p.kills,
-          weapon: p.weapon, attackMode: p.attackMode,
+          weapon: p.weapon, attackMode: p.attackMode, isAdmin: p.isAdmin,
         })),
         enemies: room.enemies.map((e) => ({
           id: e.id, x: e.x, y: e.y, hp: e.hp, maxHp: e.maxHp, typeId: e.typeId, radius: e.radius,
         })),
         bullets: room.bullets.map((b) => ({ id: b.id, x: b.x, y: b.y })),
+        enemyBullets: room.enemyBullets.map((b) => ({ id: b.id, x: b.x, y: b.y })),
       };
     }
 
     function addPlayer(opts2) {
       const id = opts2.id, name = opts2.name, classId = opts2.classId, avatar = opts2.avatar;
-      const weapon = opts2.weapon === 'melee' ? 'melee' : 'pistol';
+      const weapon = ['pistol', 'melee', 'both'].includes(opts2.weapon) ? opts2.weapon : 'pistol';
       const attackMode = opts2.attackMode === 'manual' ? 'manual' : 'auto';
       const color = COLORS[room.colorIdx % COLORS.length];
       room.colorIdx += 1;
@@ -394,7 +450,7 @@
         input: { up: false, down: false, left: false, right: false, attack: false },
         lastShot: 0, lastMelee: 0, alive: true, respawnAt: 0,
         stats: defaultStats(), classId: resolvedClassId, kills: 0, avatar: resolvedAvatar,
-        weapon, attackMode,
+        weapon, attackMode, isAdmin: false,
       };
       applyClass(player, resolvedClassId);
       room.players[id] = player;
@@ -446,8 +502,73 @@
     function getPlayerIds() { return Object.keys(room.players); }
     function getSummary() { return { wave: room.wave, phase: room.phase, players: Object.keys(room.players).length }; }
 
-    return { addPlayer, removePlayer, setInput, chooseUpgrade, sendChat, tick, getPlayer, getPlayerIds, getSummary };
+    // ---------- Admin (só quem loga com as credenciais mexe nisso) ----------
+    function loginAdmin(id, username, password) {
+      const player = room.players[id];
+      if (!player) return false;
+      if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+        player.isAdmin = true;
+        return true;
+      }
+      return false;
+    }
+
+    function adminSpawnEnemy(id, typeId) {
+      const player = room.players[id];
+      if (!player || !player.isAdmin) return false;
+
+      if (typeId === 'boss') {
+        const bossHp = Math.round(BOSS_BASE_HP * Math.pow(BOSS_HP_GROWTH, room.bossSpawnCount));
+        const pos = randEdgePosition();
+        room.enemyIdCounter += 1;
+        room.enemies.push({
+          id: room.enemyIdCounter, x: pos.x, y: pos.y, hp: bossHp, maxHp: bossHp, lastContact: 0,
+          typeId: 'boss', speed: ENEMY_SPEED * 0.55, radius: 28, contactDmg: ENEMY_CONTACT_DMG * 2.2,
+        });
+        room.bossSpawnCount += 1;
+        onSystem(`🛠️ ${player.name} (admin) spawnou um CHEFE! (${bossHp} de vida)`);
+        return true;
+      }
+
+      if (!ENEMY_TYPES[typeId]) return false;
+      const type = ENEMY_TYPES[typeId];
+      const baseHp = 16 + room.wave * 4.5;
+      const hp = Math.max(6, Math.round(baseHp * type.hpMult));
+      const pos = randEdgePosition();
+      room.enemyIdCounter += 1;
+      room.enemies.push({
+        id: room.enemyIdCounter, x: pos.x, y: pos.y, hp, maxHp: hp, lastContact: 0, lastShot: 0,
+        typeId, speed: ENEMY_SPEED * type.speedMult, radius: type.radius,
+        contactDmg: ENEMY_CONTACT_DMG * type.dmgMult,
+      });
+      onSystem(`🛠️ ${player.name} (admin) spawnou um inimigo (${typeId}).`);
+      return true;
+    }
+
+    function adminGiveUpgrade(id, upgradeId) {
+      const player = room.players[id];
+      if (!player || !player.isAdmin) return false;
+      const u = UPGRADE_POOL.find((x) => x.id === upgradeId);
+      if (!u) return false;
+      u.apply(player);
+      onSystem(`🛠️ ${player.name} (admin) aplicou upgrade: ${u.label}.`);
+      return true;
+    }
+
+    function adminSkipPhase(id) {
+      const player = room.players[id];
+      if (!player || !player.isAdmin) return false;
+      if (room.phase === 'wave') startShopPhase();
+      else endShopPhase();
+      onSystem(`🛠️ ${player.name} (admin) pulou pra próxima fase.`);
+      return true;
+    }
+
+    return {
+      addPlayer, removePlayer, setInput, chooseUpgrade, sendChat, tick, getPlayer, getPlayerIds, getSummary,
+      loginAdmin, adminSpawnEnemy, adminGiveUpgrade, adminSkipPhase,
+    };
   }
 
-  return { createEngine, CLASSES, TICK_MS };
+  return { createEngine, CLASSES, UPGRADE_POOL, ENEMY_TYPES, TICK_MS };
 });

@@ -71,6 +71,22 @@ const modeManualBtn = document.getElementById('modeManual');
 const manualHint = document.getElementById('manualHint');
 const weaponBadge = document.getElementById('weaponBadge');
 const attackBtn = document.getElementById('attackBtn');
+const loginToggleLink = document.getElementById('loginToggleLink');
+const adminFields = document.getElementById('adminFields');
+const adminUserInput = document.getElementById('adminUser');
+const adminPassInput = document.getElementById('adminPass');
+const weaponBothBtn = document.getElementById('weaponBoth');
+const adminPanel = document.getElementById('adminPanel');
+const adminEnemyType = document.getElementById('adminEnemyType');
+const adminSpawnBtn = document.getElementById('adminSpawnBtn');
+const adminUpgradeSelect = document.getElementById('adminUpgradeSelect');
+const adminUpgradeBtn = document.getElementById('adminUpgradeBtn');
+const adminSkipBtn = document.getElementById('adminSkipBtn');
+const adminDebugToggle = document.getElementById('adminDebugToggle');
+const debugOverlay = document.getElementById('debugOverlay');
+const muteBtn = document.getElementById('muteBtn');
+const copyCodeBtn = document.getElementById('copyCodeBtn');
+const personalBestEl = document.getElementById('personalBest');
 
 roomInput.addEventListener('input', () => {
   roomInput.value = roomInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -109,11 +125,15 @@ let selectedWeapon = 'pistol';
 let selectedAttackMode = 'auto';
 weaponPistolBtn.onclick = () => {
   selectedWeapon = 'pistol';
-  weaponPistolBtn.classList.add('selected'); weaponMeleeBtn.classList.remove('selected');
+  weaponPistolBtn.classList.add('selected'); weaponMeleeBtn.classList.remove('selected'); weaponBothBtn.classList.remove('selected');
 };
 weaponMeleeBtn.onclick = () => {
   selectedWeapon = 'melee';
-  weaponMeleeBtn.classList.add('selected'); weaponPistolBtn.classList.remove('selected');
+  weaponMeleeBtn.classList.add('selected'); weaponPistolBtn.classList.remove('selected'); weaponBothBtn.classList.remove('selected');
+};
+weaponBothBtn.onclick = () => {
+  selectedWeapon = 'both';
+  weaponBothBtn.classList.add('selected'); weaponPistolBtn.classList.remove('selected'); weaponMeleeBtn.classList.remove('selected');
 };
 modeAutoBtn.onclick = () => {
   selectedAttackMode = 'auto';
@@ -124,6 +144,12 @@ modeManualBtn.onclick = () => {
   selectedAttackMode = 'manual';
   modeManualBtn.classList.add('selected'); modeAutoBtn.classList.remove('selected');
   manualHint.style.display = 'block';
+};
+
+loginToggleLink.onclick = () => {
+  const showing = adminFields.style.display === 'block';
+  adminFields.style.display = showing ? 'none' : 'block';
+  loginToggleLink.textContent = showing ? '🔑 Sou administrador' : '🔑 Cancelar login';
 };
 
 // ---------- Foto do jogador (skin) ----------
@@ -176,6 +202,7 @@ let prevBulletCount = 0;
 let prevMyHp = null;
 let prevWave = 0;
 let prevPhase = null;
+const fpsFrames = [];
 let roomListInterval = null;
 const avatarImages = new Map(); // playerId -> HTMLImageElement carregado
 
@@ -205,8 +232,37 @@ function ensureAudio() {
 }
 ['pointerdown', 'keydown'].forEach((ev) => window.addEventListener(ev, ensureAudio, { once: true }));
 
+let soundEnabled = localStorage.getItem('brotato_sound_enabled') !== '0';
+muteBtn.textContent = soundEnabled ? '🔊' : '🔇';
+muteBtn.onclick = () => {
+  soundEnabled = !soundEnabled;
+  localStorage.setItem('brotato_sound_enabled', soundEnabled ? '1' : '0');
+  muteBtn.textContent = soundEnabled ? '🔊' : '🔇';
+};
+
+copyCodeBtn.onclick = () => {
+  if (!myRoom) return;
+  navigator.clipboard.writeText(myRoom).then(() => {
+    copyCodeBtn.textContent = '✅';
+    setTimeout(() => { copyCodeBtn.textContent = '📋'; }, 1200);
+  }).catch(() => {});
+};
+
+function getBestWave() { return parseInt(localStorage.getItem('brotato_best_wave') || '0', 10); }
+function updatePersonalBestDisplay() {
+  const best = getBestWave();
+  personalBestEl.textContent = best > 0 ? `🏆 Seu recorde: onda ${best}` : '';
+}
+function maybeUpdateBestWave(wave) {
+  if (wave > getBestWave()) {
+    localStorage.setItem('brotato_best_wave', String(wave));
+    updatePersonalBestDisplay();
+  }
+}
+updatePersonalBestDisplay();
+
 function beep({ freq = 440, freqEnd = null, duration = 0.08, type = 'sine', volume = 0.12 }) {
-  if (!audioCtx) return;
+  if (!audioCtx || !soundEnabled) return;
   const t0 = audioCtx.currentTime;
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
@@ -229,6 +285,27 @@ const sfx = {
   boss: () => beep({ freq: 90, duration: 0.6, type: 'sawtooth', volume: 0.16 }),
   shop: () => { beep({ freq: 520, duration: 0.15, type: 'sine', volume: 0.09 }); setTimeout(() => beep({ freq: 780, duration: 0.2, type: 'sine', volume: 0.09 }), 120); },
   upgrade: () => beep({ freq: 660, freqEnd: 990, duration: 0.18, type: 'triangle', volume: 0.1 }),
+};
+
+// ---------- Admin: estado + painel ----------
+let amIAdmin = false;
+let debugMode = false;
+
+if (window.GameEngine && window.GameEngine.UPGRADE_POOL) {
+  for (const u of window.GameEngine.UPGRADE_POOL) {
+    const opt = document.createElement('option');
+    opt.value = u.id;
+    opt.textContent = u.label;
+    adminUpgradeSelect.appendChild(opt);
+  }
+}
+
+adminSpawnBtn.onclick = () => sendGameMessage({ type: 'admin_spawn', typeId: adminEnemyType.value });
+adminUpgradeBtn.onclick = () => sendGameMessage({ type: 'admin_upgrade', upgradeId: adminUpgradeSelect.value });
+adminSkipBtn.onclick = () => sendGameMessage({ type: 'admin_skip' });
+adminDebugToggle.onchange = () => {
+  debugMode = adminDebugToggle.checked;
+  debugOverlay.style.display = debugMode ? 'block' : 'none';
 };
 
 // ---------- WebSocket ----------
@@ -277,7 +354,21 @@ function resetToLobby(statusText) {
   myRoom = null;
   latestState = null;
   lastShopRenderKey = null;
+  chosenThisShop = false;
   transport = 'idle';
+  amIAdmin = false;
+  debugMode = false;
+  adminPanel.style.display = 'none';
+  debugOverlay.style.display = 'none';
+  adminDebugToggle.checked = false;
+  attackBtn.style.display = 'none';
+  prevEnemyHp = new Map();
+  floatingTexts = [];
+  prevBulletCount = 0;
+  prevMyHp = null;
+  prevWave = 0;
+  prevPhase = null;
+  avatarImages.clear();
   chatPanel.classList.remove('open');
   gameScreen.style.display = 'none';
   lobby.style.display = 'flex';
@@ -297,8 +388,13 @@ function handleGameMessage(msg) {
     lobby.style.display = 'none';
     gameScreen.style.display = 'flex';
     statusEl.textContent = 'Na sala ' + myRoom + (msg.isPublic ? ' (pública, no servidor)' : ' (privada, direto pelo seu PC)') + '.';
-    weaponBadge.textContent = selectedWeapon === 'melee' ? '🗡️ Espada' : '🔫 Pistola';
+    weaponBadge.textContent = selectedWeapon === 'melee' ? '🗡️ Espada' : (selectedWeapon === 'both' ? '⚔️ Ambas' : '🔫 Pistola');
     attackBtn.style.display = selectedAttackMode === 'manual' ? 'block' : 'none';
+    amIAdmin = false;
+    adminPanel.style.display = 'none';
+    if (adminUserInput.value.trim() && adminPassInput.value) {
+      sendGameMessage({ type: 'admin_login', username: adminUserInput.value.trim(), password: adminPassInput.value });
+    }
     chatMessagesEl.innerHTML = '';
     chatPanel.classList.add('open');
     avatarImages.clear();
@@ -345,6 +441,7 @@ function handleGameMessage(msg) {
 
     if (msg.wave > prevWave) {
       if (msg.wave % 10 === 0) sfx.boss(); else sfx.wave();
+      maybeUpdateBestWave(msg.wave);
       prevWave = msg.wave;
     }
     if (msg.phase === 'shop' && prevPhase !== 'shop') sfx.shop();
@@ -356,6 +453,16 @@ function handleGameMessage(msg) {
 
   } else if (msg.type === 'chat_message') {
     addChatLine(msg.name, msg.color, msg.text, msg.system);
+
+  } else if (msg.type === 'admin_login_result') {
+    if (msg.success) {
+      amIAdmin = true;
+      adminPanel.style.display = 'flex';
+      lobbyMsg.textContent = '';
+      addChatLine('Sistema', '#8992a4', '🛠️ Login de administrador bem-sucedido.', true);
+    } else {
+      addChatLine('Sistema', '#8992a4', '❌ Usuário ou senha de administrador incorretos.', true);
+    }
 
   } else if (msg.type === 'avatar') {
     const img = new Image();
@@ -408,6 +515,15 @@ function hostApplyLocalAction(playerId, obj) {
   if (obj.type === 'input') hostEngine.setInput(playerId, obj);
   else if (obj.type === 'chat') hostEngine.sendChat(playerId, obj.text);
   else if (obj.type === 'choose_upgrade') hostEngine.chooseUpgrade(playerId, obj.upgradeId);
+  else if (obj.type === 'admin_login') {
+    const ok = hostEngine.loginAdmin(playerId, obj.username, obj.password);
+    const result = { type: 'admin_login_result', success: ok };
+    if (playerId === 'host') handleGameMessage(result);
+    else { const info = [...hostPeers.values()].find((i) => i.playerId === playerId); if (info && info.channel.readyState === 'open') info.channel.send(JSON.stringify(result)); }
+  }
+  else if (obj.type === 'admin_spawn') hostEngine.adminSpawnEnemy(playerId, obj.typeId);
+  else if (obj.type === 'admin_upgrade') hostEngine.adminGiveUpgrade(playerId, obj.upgradeId);
+  else if (obj.type === 'admin_skip') hostEngine.adminSkipPhase(playerId);
 }
 
 async function hostAcceptPeer(peerId, name, classId, avatar, weapon, attackMode) {
@@ -762,6 +878,19 @@ function drawPlayer(p) {
   ctx.strokeStyle = p.id === myId ? '#fff' : p.color;
   ctx.stroke();
 
+  // ícone da arma equipada, no canto inferior-direito do personagem
+  if (p.weapon) {
+    const icon = p.weapon === 'melee' ? '🗡️' : (p.weapon === 'both' ? '⚔️' : '🔫');
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(icon, p.x + 11, p.y + 13);
+  }
+  if (p.isAdmin) {
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('🛠️', p.x - 11, p.y + 13);
+  }
+
   const barW = 32;
   ctx.fillStyle = '#0008';
   ctx.fillRect(p.x - barW / 2, p.y - 26, barW, 5);
@@ -786,9 +915,10 @@ const ENEMY_COLORS = {
   swarm: '#8dff5d',
   tank: '#7a5dff',
   boss: '#ff2fd0',
+  shooter: '#5dd8ff',
 };
 const ENEMY_RIM = {
-  normal: '#7a1010', fast: '#7a1010', swarm: '#2f6b12', tank: '#2f1a7a', boss: '#6b0f5c',
+  normal: '#7a1010', fast: '#7a1010', swarm: '#2f6b12', tank: '#2f1a7a', boss: '#6b0f5c', shooter: '#0f4a6b',
 };
 
 function drawEnemy(e) {
@@ -886,7 +1016,27 @@ function drawBullet(b) {
   ctx.fill();
 }
 
+function drawEnemyBullet(b) {
+  const glow = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, 8);
+  glow.addColorStop(0, 'rgba(93,216,255,0.9)');
+  glow.addColorStop(0.45, 'rgba(93,216,255,0.55)');
+  glow.addColorStop(1, 'rgba(93,216,255,0)');
+  ctx.beginPath();
+  ctx.arc(b.x, b.y, 8, 0, Math.PI * 2);
+  ctx.fillStyle = glow;
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
+  ctx.fillStyle = '#dff7ff';
+  ctx.fill();
+}
+
 function render() {
+  const nowFrame = performance.now();
+  fpsFrames.push(nowFrame);
+  while (fpsFrames.length && nowFrame - fpsFrames[0] > 1000) fpsFrames.shift();
+
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   if (floorTexture) {
@@ -905,6 +1055,7 @@ function render() {
 
   if (joined && latestState) {
     for (const b of latestState.bullets) drawBullet(b);
+    if (latestState.enemyBullets) for (const b of latestState.enemyBullets) drawEnemyBullet(b);
     for (const e of latestState.enemies) drawEnemy(e);
     for (const p of latestState.players) drawPlayer(p);
 
@@ -919,6 +1070,16 @@ function render() {
       const label = (p.id === myId ? 'você' : p.name);
       return `<div class="scoreItem">${label}: <b>${p.kills || 0}</b> ☠</div>`;
     }).join('');
+
+    if (debugMode) {
+      const me = latestState.players.find((p) => p.id === myId);
+      debugOverlay.textContent =
+        `transporte: ${transport} | sala: ${myRoom}\n` +
+        `onda: ${latestState.wave} | fase: ${latestState.phase}\n` +
+        `inimigos: ${latestState.enemies.length} | balas: ${latestState.bullets.length} | jogadores: ${latestState.players.length}\n` +
+        (me ? `você: hp=${Math.round(me.hp)}/${me.maxHp} arma=${me.weapon} modo=${me.attackMode} admin=${me.isAdmin}\n` : '') +
+        `fps: ${fpsFrames.length}`;
+    }
   }
 
   // números de dano flutuantes

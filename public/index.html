@@ -57,6 +57,27 @@
   .visBtn.selected { border-color: #5dd8ff; color: #5dd8ff; background: #10222b; }
   #manualHint { font-size: 11px; color: #666; margin-top: 8px; }
 
+  #loginToggleLink { font-size: 11px; color: #666; margin-top: 8px; cursor: pointer; text-decoration: underline; }
+  #adminFields input { margin-top: 8px; }
+
+  #adminPanel {
+    width: 100%; max-width: 900px; background: #1c2029; border: 2px solid #3a3f4f;
+    border-radius: 10px; padding: 12px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .adminRow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .adminRow select {
+    flex: 1; min-width: 120px; padding: 8px; border-radius: 6px; border: 1px solid #3a3f4f;
+    background: #14161c; color: #eee; font-size: 12px;
+  }
+  .adminRow button { width: auto; padding: 8px 14px; font-size: 12px; background: #ff2fd0; color: #14161c; }
+  .adminDebugToggle { font-size: 12px; color: #ccc; display: flex; align-items: center; gap: 6px; }
+
+  #debugOverlay {
+    width: 100%; max-width: 900px; background: #0c0d11; border: 1px solid #2a2f3d; border-radius: 8px;
+    padding: 8px 12px; margin-top: 8px; font-size: 11px; color: #8dff5d; font-family: monospace;
+    white-space: pre-wrap;
+  }
+
   #weaponBadge {
     background: #2a2f3d; padding: 4px 10px; border-radius: 6px; font-size: 11px;
     color: #ffd75d; font-weight: bold;
@@ -108,7 +129,10 @@
     background: #2a2f3d; padding: 4px 10px; border-radius: 6px; font-size: 11px;
     letter-spacing: 2px; color: #5dd8ff; font-weight: bold;
   }
+  #copyCodeBtn { cursor: pointer; letter-spacing: 0; margin-left: 4px; }
   #hud button { width: auto; padding: 6px 14px; font-size: 11px; }
+  #muteBtn { background: #2a2f3d; color: #ccc; font-size: 13px; padding: 6px 10px; }
+  #personalBest { font-size: 11.5px; color: #8dff5d; text-align: center; min-height: 14px; }
   #leaveBtn { background: #ff5d5d; color: #14161c; }
   #chatToggleBtn { background: #2a2f3d; color: #ccc; }
   .canvas-wrap { position: relative; width: 100%; max-width: 900px; }
@@ -192,6 +216,11 @@
     <div class="lobby-section">
       <label for="nameInput">Seu nome (opcional)</label>
       <input id="nameInput" maxlength="16" placeholder="Ex: Zé">
+      <div id="loginToggleLink">🔑 Sou administrador</div>
+      <div id="adminFields" style="display:none">
+        <input id="adminUser" placeholder="Usuário" style="margin-top:8px">
+        <input id="adminPass" type="password" placeholder="Senha" style="margin-top:8px">
+      </div>
     </div>
 
     <div class="lobby-section">
@@ -216,6 +245,7 @@
       <div class="visToggle">
         <button type="button" class="visBtn selected" id="weaponPistol">🔫 Pistola</button>
         <button type="button" class="visBtn" id="weaponMelee">🗡️ Espada</button>
+        <button type="button" class="visBtn" id="weaponBoth">⚔️ Ambas</button>
       </div>
       <label style="margin-top:10px">Modo de ataque</label>
       <div class="visToggle">
@@ -250,19 +280,43 @@
     </div>
 
     <div id="lobbyMsg"></div>
+    <div id="personalBest"></div>
     <div id="lobbyStatus">Conectando ao servidor...</div>
   </div>
 
   <div id="gameScreen">
     <div id="hud">
-      <div id="roomBadge">SALA: <span id="roomCode">----</span></div>
+      <div id="roomBadge">SALA: <span id="roomCode">----</span> <span id="copyCodeBtn" title="Copiar código">📋</span></div>
       <div id="weaponBadge">🔫 Pistola</div>
+      <button id="muteBtn" type="button">🔊</button>
       <div>Onda: <span id="wave">0</span></div>
       <div>Próxima: <span id="waveTimer">--</span>s</div>
       <div>Jogadores: <span id="playerCount">0</span></div>
       <button id="chatToggleBtn">💬 Chat</button>
       <button id="leaveBtn">Sair da sala</button>
     </div>
+    <div id="adminPanel" style="display:none">
+      <div class="adminRow">
+        <select id="adminEnemyType">
+          <option value="normal">Normal</option>
+          <option value="fast">Rápido</option>
+          <option value="swarm">Enxame</option>
+          <option value="tank">Tanque</option>
+          <option value="shooter">Atirador</option>
+          <option value="boss">CHEFE</option>
+        </select>
+        <button id="adminSpawnBtn" type="button">Spawnar</button>
+      </div>
+      <div class="adminRow">
+        <select id="adminUpgradeSelect"></select>
+        <button id="adminUpgradeBtn" type="button">Aplicar em mim</button>
+      </div>
+      <div class="adminRow">
+        <button id="adminSkipBtn" type="button">⏭️ Pular fase</button>
+        <label class="adminDebugToggle"><input type="checkbox" id="adminDebugToggle"> Debug</label>
+      </div>
+    </div>
+    <div id="debugOverlay" style="display:none"></div>
     <div class="canvas-wrap">
       <canvas id="game" width="900" height="600"></canvas>
       <div id="shopOverlay">
